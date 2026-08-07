@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ISMS資訊資產管理系統</title>
+<style>
+  :root {
+    --primary: #1a3a5c;
+    --primary-light: #2d6ca2;
+    --accent: #0ea5e9;
+    --success: #16a34a;
+    --danger: #dc2626;
+    --warning: #d97706;
+    --bg: #f0f4f8;
+    --surface: #ffffff;
+    --border: #e2e8f0;
+    --text: #1e293b;
+    --text-muted: #64748b;
+    --shadow: 0 4px 16px rgba(0,0,0,.08);
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* ── Sidebar ── */
+  .layout { display: flex; min-height: 100vh; }
+  .sidebar {
+    width: 240px; background: var(--primary); color: #fff;
+    display: flex; flex-direction: column; flex-shrink: 0; position: fixed; top:0; bottom:0; left:0; z-index:100;
+  }
+  .sidebar-header { padding: 24px 20px; border-bottom: 1px solid rgba(255,255,255,.1); }
+  .sidebar-header h1 { font-size: 15px; font-weight: 700; line-height: 1.4; }
+  .sidebar-header p  { font-size: 11px; opacity: .6; margin-top: 4px; }
+  .sidebar nav { flex: 1; padding: 16px 0; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 20px; cursor: pointer; font-size: 14px;
+    transition: background .15s; color: rgba(255,255,255,.8); border: none; background: none; width: 100%; text-align: left;
+  }
+  .nav-item:hover { background: rgba(255,255,255,.1); color: #fff; }
+  .nav-item.active { background: var(--primary-light); color: #fff; }
+  .nav-item .icon { font-size: 18px; width: 24px; }
+  .sidebar-footer { padding: 16px 20px; font-size: 11px; opacity: .4; border-top: 1px solid rgba(255,255,255,.1); }
+
+  /* ── Main ── */
+  .main { margin-left: 240px; flex: 1; padding: 28px 32px; min-height: 100vh; }
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* ── Top bar ── */
+  .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+  .topbar h2 { font-size: 22px; font-weight: 700; color: var(--primary); }
+  .topbar-actions { display: flex; gap: 10px; align-items: center; }
+
+  /* ── Stats ── */
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .stat-card {
+    background: var(--surface); border-radius: var(--radius); padding: 20px 24px;
+    box-shadow: var(--shadow); border-left: 4px solid var(--accent);
+  }
+  .stat-card.green  { border-color: var(--success); }
+  .stat-card.red    { border-color: var(--danger); }
+  .stat-card.orange { border-color: var(--warning); }
+  .stat-card .label { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+  .stat-card .value { font-size: 32px; font-weight: 800; }
+  .stat-card.green  .value { color: var(--success); }
+  .stat-card.red    .value { color: var(--danger); }
+  .stat-card.orange .value { color: var(--warning); }
+  .stat-card .value { color: var(--primary); }
+
+  /* ── Toolbar ── */
+  .toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+  .search-box {
+    flex: 1; min-width: 200px; padding: 9px 14px; border: 1px solid var(--border);
+    border-radius: 8px; font-size: 14px; outline: none; transition: border-color .2s;
+  }
+  .search-box:focus { border-color: var(--accent); }
+  .filter-select {
+    padding: 9px 14px; border: 1px solid var(--border); border-radius: 8px;
+    font-size: 14px; background: #fff; cursor: pointer; outline: none;
+  }
+
+  /* ── Buttons ── */
+  .btn {
+    padding: 9px 18px; border-radius: 8px; border: none; font-size: 14px; cursor: pointer;
+    font-weight: 600; transition: opacity .15s, transform .1s; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn:active { transform: scale(.97); }
+  .btn-primary  { background: var(--primary-light); color: #fff; }
+  .btn-success  { background: var(--success); color: #fff; }
+  .btn-danger   { background: var(--danger); color: #fff; }
+  .btn-warning  { background: var(--warning); color: #fff; }
+  .btn-ghost    { background: #e2e8f0; color: var(--text); }
+  .btn:hover    { opacity: .88; }
+  .btn-sm       { padding: 5px 12px; font-size: 12px; border-radius: 6px; }
+
+  /* ── Table ── */
+  .table-wrap { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  thead tr { background: var(--primary); color: #fff; }
+  thead th { padding: 12px 14px; text-align: left; font-weight: 600; white-space: nowrap; }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: #f8fafc; }
+  tbody td { padding: 11px 14px; vertical-align: middle; }
+  .actions { display: flex; gap: 6px; }
+
+  /* ── Badge ── */
+  .badge {
+    display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 600;
+  }
+  .badge-active  { background: #dcfce7; color: #166534; }
+  .badge-closed  { background: #fee2e2; color: #991b1b; }
+  .badge-pending { background: #fef9c3; color: #854d0e; }
+  .badge-expired { background: #e2e8f0; color: #475569; }
+  .badge-default { background: #dbeafe; color: #1e40af; }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45);
+    z-index: 1000; justify-content: center; align-items: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface); border-radius: 14px; padding: 32px; width: 580px; max-width: 95vw;
+    max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.25);
+  }
+  .modal h3 { font-size: 18px; font-weight: 700; color: var(--primary); margin-bottom: 24px; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-group.full { grid-column: 1/-1; }
+  label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+  .form-control {
+    padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px;
+    font-size: 14px; outline: none; transition: border-color .2s; font-family: inherit;
+  }
+  .form-control:focus { border-color: var(--accent); }
+  select.form-control { background: #fff; cursor: pointer; }
+  .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; }
+
+  /* ── Notify modal ── */
+  .notify-info { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 16px; margin-bottom: 16px; font-size: 14px; line-height: 1.7; }
+  .notify-info strong { color: var(--primary); }
+
+  /* ── Log table ── */
+  .log-status-sent   { color: var(--success); font-weight: 600; }
+  .log-status-failed { color: var(--danger); font-weight: 600; }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+    background: #1e293b; color: #fff; padding: 12px 22px; border-radius: 10px;
+    font-size: 14px; box-shadow: 0 8px 24px rgba(0,0,0,.3);
+    transform: translateY(80px); opacity: 0; transition: all .3s;
+  }
+  #toast.show { transform: translateY(0); opacity: 1; }
+  #toast.success { background: var(--success); }
+  #toast.error   { background: var(--danger); }
+
+  /* ── Empty state ── */
+  .empty { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+  .empty .icon { font-size: 48px; margin-bottom: 12px; }
+
+  /* ── Confirm dialog ── */
+  .confirm-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    z-index: 2000; justify-content: center; align-items: center;
+  }
+  .confirm-overlay.open { display: flex; }
+  .confirm-box {
+    background: #fff; border-radius: 12px; padding: 28px; max-width: 380px; width: 90%;
+    text-align: center; box-shadow: 0 16px 40px rgba(0,0,0,.2);
+  }
+  .confirm-box h4 { font-size: 17px; margin-bottom: 10px; color: var(--primary); }
+  .confirm-box p  { font-size: 14px; color: var(--text-muted); margin-bottom: 20px; }
+  .confirm-box .btns { display: flex; gap: 10px; justify-content: center; }
+
+	/* ── Login Overlay ── */
+	.login-overlay {
+		display: none; position: fixed; inset: 0; background: var(--bg);
+		z-index: 9999; justify-content: center; align-items: center;
+	}
+	.login-overlay.open { display: flex; }
+	.login-box {
+		background: #fff; border-radius: 12px; padding: 40px; max-width: 400px; width: 90%;
+		text-align: center; box-shadow: 0 16px 40px rgba(0,0,0,.1);
+	}
+	.login-box h2 { color: var(--primary); margin-bottom: 20px; }
+	.login-box button { width: 100%; padding: 12px; font-size: 16px; margin-top: 20px; }
+	.logout-btn { background: var(--danger); border: none; color: #fff; margin: 20px; padding: 8px 16px; border-radius: 6px; cursor: pointer; transition: 0.2s; font-weight: bold; }
+	.logout-btn:hover { background: #b91c1c; }
+
+  /* ── User Profile (Top Right) ── */
+  .user-profile { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text-muted); }
+  .user-profile strong { color: var(--text); font-weight: 600; }
+
+  @media (max-width: 900px) {
+    .sidebar { width: 200px; }
+    .main { margin-left: 200px; padding: 20px; }
+    .stats-grid { grid-template-columns: repeat(2,1fr); }
+    .form-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 600px) {
+    .sidebar { display: none; }
+    .main { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h1>🔐 ISMS 資訊資產<br>管理系統</h1>
+    </div>
+    <nav>
+      <button class="nav-item active" onclick="showPage('dashboard')">
+        <span class="icon">📊</span> 儀表板
+      </button>
+      <button class="nav-item" onclick="showPage('accounts')">
+        <span class="icon">👤</span> 04-062特殊權限帳號管理
+      </button>
+      <button class="nav-item" onclick="showPage('notifications')">
+        <span class="icon">📧</span> 通知記錄
+      </button>
+    </nav>
+    <button class="logout-btn" onclick="logout()">登出</button>
+    <div class="sidebar-footer">v1.4 · 2026</div>
+  </aside>
+
+  <!-- Main content -->
+  <main class="main">
+
+    <!-- ══ Dashboard ══ -->
+    <div class="page active" id="page-dashboard">
+      <div class="topbar">
+        <h2>📊 儀表板</h2>
+        <div class="topbar-actions">
+          <div class="user-profile" id="user-profile-dash"></div>
+          <button class="btn btn-warning" onclick="notifyAll()">📧 批次通知所有使用中帳號</button>
+        </div>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="label">帳號總數</div><div class="value" id="stat-total">—</div></div>
+        <div class="stat-card green"><div class="label">使用中</div><div class="value" id="stat-active">—</div></div>
+        <div class="stat-card orange"><div class="label">待確認</div><div class="value" id="stat-pending">—</div></div>
+        <div class="stat-card red"><div class="label">已關閉</div><div class="value" id="stat-closed">—</div></div>
+      </div>
+      <div style="background:var(--surface);border-radius:var(--radius);padding:24px;box-shadow:var(--shadow);">
+        <h3 style="font-size:15px;font-weight:700;color:var(--primary);margin-bottom:16px;">最近帳號清單（前10筆）</h3>
+        <div id="dashboard-table"></div>
+      </div>
+    </div>
+
+    <!-- ══ Accounts ══ -->
+    <div class="page" id="page-accounts">
+      <div class="topbar">
+        <h2>👤 04-062特殊權限帳號管理</h2>
+        <div class="topbar-actions">
+          <div class="user-profile" id="user-profile-acc"></div>
+          <button class="btn btn-primary" onclick="openCreate()">＋ 新增帳號</button>
+        </div>
+      </div>
+      <div class="toolbar">
+        <input type="text" class="search-box" id="search-input" placeholder="🔍 搜尋帳號名稱、使用者、系統…" oninput="debounceSearch()">
+        <select class="filter-select" id="status-filter" onchange="loadAccounts()">
+          <option value="all">全部狀態</option>
+          <option value="active">使用中</option>
+          <option value="pending">待確認</option>
+          <option value="closed">已關閉</option>
+          <option value="expired">已過期</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#ID</th>
+              <th>系統 / 環境</th>
+              <th>IP位址 / 盤點</th>
+              <th>單位</th>
+              <th>帳號名稱 / 種類</th>
+              <th>使用者 / Email</th>
+              <th>狀態</th>
+              <th>輸入人員</th>
+              <th width="100">操作</th>
+            </tr>
+          </thead>
+          <tbody id="accounts-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══ Notifications ══ -->
+    <div class="page" id="page-notifications">
+      <div class="topbar">
+        <h2>📧 通知記錄</h2>
+        <button class="btn btn-ghost" onclick="loadLogs()">↻ 重新整理</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>#</th><th>帳號ID</th><th>帳號名稱</th><th>Email</th><th>發送時間</th><th>狀態</th><th>訊息</th></tr>
+          </thead>
+          <tbody id="logs-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ═══ Account Modal ═══ -->
+<div class="modal-overlay" id="account-modal">
+  <div class="modal">
+    <h3 id="modal-title">新增特殊權限帳號</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>系統名稱 *</label>
+        <input class="form-control" id="f-system_name" placeholder="e.g. Sysldap">
+      </div>
+      <div class="form-group">
+        <label>類別 *</label>
+        <select class="form-control" id="f-environment">
+          <option value="開發區">開發區</option>
+          <option value="測試區">測試區</option>
+          <option value="正式區" selected>正式區</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>IP 位址 *</label>
+        <input class="form-control" id="f-ip_address" placeholder="e.g. 10.109.4.9">
+      </div>
+      <div class="form-group">
+        <label>盤點日期 *</label>
+        <input class="form-control" id="f-inventory_date" placeholder="e.g. 20260803">
+      </div>
+      <div class="form-group">
+        <label>帳號名稱 *</label>
+        <input class="form-control" id="f-account_name" placeholder="e.g. root">
+      </div>
+      <div class="form-group">
+        <label>帳號種類 *</label>
+        <select class="form-control" id="f-account_type">
+          <option value="預設">預設</option>
+          <option value="系統管理用">系統管理用</option>
+          <option value="關閉帳號">關閉帳號</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>通行碼定期變更</label>
+        <select class="form-control" id="f-passphrase_rotate">
+          <option value="是">是</option>
+          <option value="否">否</option>
+          <option value="NA">NA</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>單位名稱</label>
+        <input type="text" class="form-control" id="f-department" placeholder="例如：資安組">
+      </div>
+      <div class="form-group">
+        <label>單位代碼</label>
+        <input type="text" class="form-control" id="f-department_code" placeholder="例如：A01">
+      </div>
+      <div class="form-group">
+        <label>使用者姓名</label>
+        <input class="form-control" id="f-owner_name" placeholder="e.g. 顏景喆">
+      </div>
+      <div class="form-group full">
+        <label>Email（用於確認通知）</label>
+        <input class="form-control" id="f-email" type="email" placeholder="user@example.com">
+      </div>
+      <div class="form-group">
+        <label>狀態</label>
+        <select class="form-control" id="f-status">
+          <option value="active">使用中</option>
+          <option value="pending">待確認</option>
+          <option value="closed">已關閉</option>
+          <option value="expired">已過期</option>
+        </select>
+      </div>
+      <div class="form-group full">
+        <label>備註</label>
+        <textarea class="form-control" id="f-remarks" rows="2" placeholder="選填"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('account-modal')">取消</button>
+      <button class="btn btn-primary" onclick="saveAccount()">💾 儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Notify Modal ═══ -->
+<div class="modal-overlay" id="notify-modal">
+  <div class="modal" style="max-width:480px;">
+    <h3>📧 發送確認通知</h3>
+    <div class="notify-info" id="notify-info-box"></div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">
+      系統將發送 Email 給使用者，提供連結讓其線上確認是否繼續使用此特殊權限帳號。
+      確認連結有效期限為 <strong>7 天</strong>。
+    </p>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('notify-modal')">取消</button>
+      <button class="btn btn-success" onclick="doNotify()">✉️ 確認發送</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Confirm Delete ═══ -->
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-box">
+    <h4>⚠️ 確認刪除</h4>
+    <p id="confirm-msg">確定要刪除此帳號嗎？此操作無法復原。</p>
+    <div class="btns">
+      <button class="btn btn-ghost" onclick="closeConfirm()">取消</button>
+      <button class="btn btn-danger" id="confirm-ok">確定刪除</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- Login Overlay -->
+<div class="login-overlay" id="login-overlay">
+  <div class="login-box">
+    <h2>🔐 ISMS 系統登入</h2>
+    <p style="color:var(--text-muted); margin-bottom: 20px;">本系統僅限授權人員存取</p>
+    <button class="btn btn-primary" onclick="window.location.href='/api/login'">透過 Google 登入</button>
+  </div>
+</div>
+
+<script>
+const API = '';
+let accounts = [];
+let editingId = null;
+let notifyId = null;
+let deleteId = null;
+let searchTimer = null;
+
+// ─── Navigation ───
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  event.currentTarget.classList.add('active');
+  if (name === 'dashboard') { loadStats(); loadDashboardAccounts(); }
+  if (name === 'accounts')  { loadAccounts(); }
+  if (name === 'notifications') { loadLogs(); }
+}
+
+// ─── Toast ───
+function toast(msg, type='') {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = 'show ' + type;
+  setTimeout(() => el.className = '', 3000);
+}
+
+// ─── Stats ───
+async function loadStats() {
+  const r = await fetch(API + '/api/stats');
+  const s = await r.json();
+  document.getElementById('stat-total').textContent   = s.total   || 0;
+  document.getElementById('stat-active').textContent  = s.active  || 0;
+  document.getElementById('stat-pending').textContent = s.pending || 0;
+  document.getElementById('stat-closed').textContent  = s.closed  || 0;
+}
+
+async function loadDashboardAccounts() {
+  const r = await fetch(API + '/api/accounts?status=all');
+  const list = await r.json();
+  const top10 = list.slice(0, 10);
+  const tbody = top10.map(a => `
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px;">
+      <span style="color:var(--text-muted);width:24px;">#${a.id}</span>
+      <span style="flex:1;font-weight:600;">${esc(a.account_name)}</span>
+      <span style="color:var(--text-muted);">${esc(a.system_name)}</span>
+      <span style="min-width:60px;">${statusBadge(a.status)}</span>
+      <span style="color:var(--text-muted);font-size:12px;">${esc(a.owner_name)}</span>
+    </div>`).join('');
+  document.getElementById('dashboard-table').innerHTML = tbody ||
+    '<div class="empty"><div class="icon">📋</div><p>尚無帳號資料</p></div>';
+}
+
+// ─── Accounts ───
+async function loadAccounts() {
+  const status = document.getElementById('status-filter').value;
+  const q = document.getElementById('search-input').value.trim();
+  let url = API + '/api/accounts';
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  else if (status !== 'all') params.set('status', status);
+  if ([...params].length) url += '?' + params;
+
+  const r = await fetch(url);
+  accounts = await r.json();
+  renderAccounts(accounts);
+}
+
+function renderAccounts(list) {
+  const tbody = document.getElementById('accounts-body');
+  if (!list || !list.length) {
+    tbody.innerHTML = `<tr><td colspan="9"><div class="empty"><div class="icon">🔍</div><p>無符合資料</p></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = list.map(a => `
+    <tr>
+      <td style="color:var(--text-muted);font-size:12px;">#${a.id}</td>
+      <td>${esc(a.system_name)}<br><span style="font-size:12px;color:var(--text-muted);">${esc(a.environment)}</span></td>
+      <td>${esc(a.ip_address)}<br><span style="font-size:12px;color:var(--text-muted);">${esc(a.inventory_date)}</span></td>
+      <td>${esc(a.department)}<br><span style="font-size:12px;color:var(--text-muted);">${esc(a.department_code)}</span></td>
+      <td><strong>${esc(a.account_name)}</strong><br>${accountTypeBadge(a.account_type)}</td>
+      <td>${esc(a.owner_name)}<br><span style="font-size:12px;color:var(--text-muted);">${esc(a.email)}</span></td>
+      <td>${statusBadge(a.status)}</td>
+      <td style="font-size:12px;color:var(--text-muted);">${esc(a.creator)}</td>
+      <td>
+        <div class="actions">
+          <button class="btn btn-ghost btn-sm" onclick="openEdit(${a.id})" title="編輯">✏️</button>
+          <button class="btn btn-warning btn-sm" onclick="openNotify(${a.id})" title="發送通知" ${!a.email?'disabled':''}>📧</button>
+          <button class="btn btn-danger btn-sm" onclick="confirmDelete(${a.id}, '${esc(a.account_name)}')" title="刪除">🗑️</button>
+        </div>
+      </td>
+    </tr>`).join('');
+}
+
+function debounceSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(loadAccounts, 350);
+}
+
+// ─── CRUD ───
+function openCreate() {
+  editingId = null;
+  document.getElementById('modal-title').textContent = '新增特殊權限帳號';
+  clearForm();
+  document.getElementById('f-inventory_date').value = new Date().toISOString().slice(0,10).replace(/-/g,'');
+  document.getElementById('account-modal').classList.add('open');
+}
+
+async function openEdit(id) {
+  editingId = id;
+  document.getElementById('modal-title').textContent = '編輯帳號 #' + id;
+  const r = await fetch(API + '/api/accounts/' + id);
+  const a = await r.json();
+  fillForm(a);
+  document.getElementById('account-modal').classList.add('open');
+}
+
+function fillForm(a) {
+  const fields = ['system_name','environment','ip_address','inventory_date','account_name','account_type','department','department_code','owner_name','email','passphrase_rotate','status','remarks'];
+  fields.forEach(f => {
+    const el = document.getElementById('f-' + f);
+    if (el) el.value = a[f] || '';
+  });
+}
+
+function clearForm() {
+  ['system_name','ip_address','inventory_date','account_name','department','department_code','owner_name','email','remarks'].forEach(f => {
+    const el = document.getElementById('f-' + f);
+    if (el) el.value = '';
+  });
+  document.getElementById('f-account_type').value = '系統管理用';
+  document.getElementById('f-environment').value = '正式區';
+  document.getElementById('f-passphrase_rotate').value = '是';
+  document.getElementById('f-status').value = 'active';
+}
+
+async function saveAccount() {
+  const payload = {};
+  ['system_name','environment','ip_address','inventory_date','account_name','account_type','department','department_code','owner_name','email','passphrase_rotate','status','remarks'].forEach(f => {
+    payload[f] = document.getElementById('f-' + f).value;
+  });
+  if (!payload.system_name || !payload.account_name) { toast('請填寫必填欄位', 'error'); return; }
+
+  const url = editingId ? API + '/api/accounts/' + editingId : API + '/api/accounts';
+  const method = editingId ? 'PUT' : 'POST';
+  const r = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+  if (r.ok) {
+    toast(editingId ? '帳號已更新 ✅' : '帳號已新增 ✅', 'success');
+    closeModal('account-modal');
+    loadAccounts();
+    loadStats();
+  } else {
+    const err = await r.json();
+    toast('錯誤：' + (err.error || '操作失敗'), 'error');
+  }
+}
+
+// ─── Notify ───
+function openNotify(id) {
+  notifyId = id;
+  const a = accounts.find(x => x.id === id);
+  document.getElementById('notify-info-box').innerHTML = a ? `
+    <div><strong>系統：</strong>${esc(a.system_name)} (${esc(a.ip_address)})</div>
+    <div><strong>帳號：</strong>${esc(a.account_name)} [${esc(a.account_type)}]</div>
+    <div><strong>使用者：</strong>${esc(a.owner_name)}</div>
+    <div><strong>Email：</strong>${esc(a.email)}</div>` : '載入中...';
+  document.getElementById('notify-modal').classList.add('open');
+}
+
+async function doNotify() {
+  const r = await fetch(API + '/api/accounts/' + notifyId + '/notify', { method: 'POST' });
+  const j = await r.json();
+  closeModal('notify-modal');
+  if (r.ok) {
+    toast('通知已發送至 ' + j.email, 'success');
+    loadAccounts();
+  } else {
+    toast('發送失敗：' + (j.error || '未知錯誤'), 'error');
+  }
+}
+
+// Notify All
+async function notifyAll() {
+  if (!confirm('將對所有「使用中」且有 Email 的帳號發送確認通知，確定繼續？')) return;
+  const btn = event.currentTarget;
+  btn.disabled = true; btn.textContent = '發送中…';
+  const r = await fetch(API + '/api/notify-all', { method: 'POST' });
+  const j = await r.json();
+  btn.disabled = false; btn.innerHTML = '📧 批次通知所有使用中帳號';
+  toast(`發送完成：成功 ${j.sent} 封，失敗 ${j.failed} 封`, j.failed ? 'error' : 'success');
+  loadStats();
+}
+
+// ─── Delete ───
+function confirmDelete(id, name) {
+  deleteId = id;
+  document.getElementById('confirm-msg').textContent = `確定要刪除帳號「${name}」(#${id})？此操作無法復原。`;
+  document.getElementById('confirm-ok').onclick = doDelete;
+  document.getElementById('confirm-overlay').classList.add('open');
+}
+
+async function doDelete() {
+  const r = await fetch(API + '/api/accounts/' + deleteId, { method: 'DELETE' });
+  closeConfirm();
+  if (r.ok) {
+    toast('帳號已刪除', 'success');
+    loadAccounts(); loadStats();
+  } else {
+    toast('刪除失敗', 'error');
+  }
+}
+
+function closeConfirm() { document.getElementById('confirm-overlay').classList.remove('open'); }
+
+// ─── Logs ───
+async function loadLogs() {
+  const r = await fetch(API + '/api/notification-logs');
+  const logs = await r.json();
+  const tbody = document.getElementById('logs-body');
+  if (!logs.length) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty"><div class="icon">📭</div><p>尚無通知記錄</p></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = logs.map(l => `
+    <tr>
+      <td>${l.id}</td>
+      <td>${l.account_id}</td>
+      <td>${esc(l.account_name)}</td>
+      <td>${esc(l.email)}</td>
+      <td style="font-size:12px;">${new Date(l.sent_at).toLocaleString('zh-TW')}</td>
+      <td><span class="log-status-${l.status}">${l.status === 'sent' ? '✅ 成功' : '❌ 失敗'}</span></td>
+      <td style="font-size:12px;color:var(--text-muted);">${esc(l.message)}</td>
+    </tr>`).join('');
+}
+
+// ─── Helpers ───
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function statusBadge(s) {
+  const map = { active:'badge-active', closed:'badge-closed', pending:'badge-pending', expired:'badge-expired' };
+  const label = { active:'使用中', closed:'已關閉', pending:'待確認', expired:'已過期' };
+  return `<span class="badge ${map[s]||'badge-default'}">${label[s]||s}</span>`;
+}
+
+function accountTypeBadge(t) {
+  if (t === '預設') return `<span class="badge badge-default">預設</span>`;
+  if (t === '關閉帳號') return `<span class="badge badge-closed">關閉</span>`;
+  return `<span class="badge" style="background:#f0fdf4;color:#166534;">${esc(t)}</span>`;
+}
+
+function formatDate(d) {
+  if (!d) return '<span style="color:#cbd5e1;">—</span>';
+  return new Date(d).toLocaleDateString('zh-TW');
+}
+
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── Close on overlay click ───
+document.querySelectorAll('.modal-overlay').forEach(el => {
+  el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); });
+});
+document.getElementById('confirm-overlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeConfirm();
+});
+
+// ─── Init ───
+async function checkLogin() {
+  const r = await fetch(API + '/api/me');
+  if (r.ok) {
+    const data = await r.json();
+    const name = data.name || data.email.split('@')[0];
+    const profileHtml = `<strong>👤 ${esc(name)}</strong>`;
+    const upDash = document.getElementById('user-profile-dash');
+    if (upDash) upDash.innerHTML = profileHtml;
+    const upAcc = document.getElementById('user-profile-acc');
+    if (upAcc) upAcc.innerHTML = profileHtml;
+
+    loadStats();
+    loadDashboardAccounts();
+  } else {
+    document.getElementById('login-overlay').classList.add('open');
+  }
+}
+async function logout() {
+  await fetch(API + '/api/logout', { method: 'POST' });
+  location.reload();
+}
+checkLogin();
+</script>
+</body>
+</html>
