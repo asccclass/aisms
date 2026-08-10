@@ -1,0 +1,90 @@
+<div class="modal-overlay" id="form-config-modal">
+  <div class="modal" style="max-width:760px;">
+    <h3 id="form-config-title">新增表單設定</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>表單 Key *</label>
+        <input class="form-control mono" id="ff-key" placeholder="e.g. isms-04-062">
+      </div>
+      <div class="form-group">
+        <label>表單代碼 *</label>
+        <input class="form-control" id="ff-code" placeholder="e.g. ISMS-04-062">
+      </div>
+      <div class="form-group">
+        <label>短代碼 *</label>
+        <input class="form-control" id="ff-short_code" placeholder="e.g. 04-062">
+      </div>
+      <div class="form-group">
+        <label>顯示順序 *</label>
+        <input class="form-control" id="ff-display_order" type="number" min="1" value="1">
+      </div>
+      <div class="form-group full">
+        <label>表單名稱 *</label>
+        <input class="form-control" id="ff-name" placeholder="e.g. 特殊權限帳號管理">
+      </div>
+      <div class="form-group full">
+        <label>表單描述</label>
+        <textarea class="form-control" id="ff-description" rows="2" placeholder="首頁卡片說明"></textarea>
+      </div>
+      <div class="form-group">
+        <label>資料來源 Provider *</label>
+        <select class="form-control" id="ff-provider_key"></select>
+      </div>
+      <div class="form-group">
+        <label>啟用狀態</label>
+        <select class="form-control" id="ff-enabled">
+          <option value="true">啟用</option>
+          <option value="false">停用</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>明細標題</label>
+        <input class="form-control" id="ff-detail_title" placeholder="e.g. 最近盤點清單">
+      </div>
+      <div class="form-group">
+        <label>空資料提示</label>
+        <input class="form-control" id="ff-empty_text" placeholder="e.g. 尚無資料">
+      </div>
+      <div class="form-group">
+        <label>正常狀態文字</label>
+        <input class="form-control" id="ff-status_normal_text" placeholder="e.g. 狀況正常">
+      </div>
+      <div class="form-group">
+        <label>需追蹤文字</label>
+        <input class="form-control" id="ff-status_needs_attention_text" placeholder="e.g. 需追蹤">
+      </div>
+      <div class="form-group">
+        <label>提醒一標題</label>
+        <input class="form-control" id="ff-active_title" placeholder="e.g. 使用中帳號">
+      </div>
+      <div class="form-group">
+        <label>提醒一說明</label>
+        <input class="form-control" id="ff-active_meta" placeholder="提醒說明">
+      </div>
+      <div class="form-group">
+        <label>提醒二標題</label>
+        <input class="form-control" id="ff-pending_title" placeholder="e.g. 待確認帳號">
+      </div>
+      <div class="form-group">
+        <label>提醒二說明</label>
+        <input class="form-control" id="ff-pending_meta" placeholder="提醒說明">
+      </div>
+      <div class="form-group">
+        <label>提醒三標題</label>
+        <input class="form-control" id="ff-closed_title" placeholder="e.g. 已關閉帳號">
+      </div>
+      <div class="form-group">
+        <label>提醒三說明</label>
+        <input class="form-control" id="ff-closed_meta" placeholder="提醒說明">
+      </div>
+      <div class="form-group full">
+        <label>最近更新標題</label>
+        <input class="form-control" id="ff-recent_title" placeholder="e.g. 最近更新紀錄">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('form-config-modal')">取消</button>
+      <button class="btn btn-primary" onclick="saveDashboardForm()">💾 儲存表單設定</button>
+    </div>
+  </div>
+</div>

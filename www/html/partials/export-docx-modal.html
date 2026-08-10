@@ -1,0 +1,22 @@
+<div class="modal-overlay" id="export-docx-modal">
+  <div class="modal" style="max-width:520px;">
+    <h3>⬇ 匯出 DOCX</h3>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">
+      匯出前可先填入簽核欄資訊，下載的 Word 檔會自動帶入「盤點者」與「組長」欄位。
+    </p>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>盤點者</label>
+        <input class="form-control" id="export-inventory-by" placeholder="例如：王小明">
+      </div>
+      <div class="form-group">
+        <label>組長姓名</label>
+        <input class="form-control" id="export-group-leader" placeholder="例如：陳組長">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('export-docx-modal')">取消</button>
+      <button class="btn btn-primary" onclick="confirmDownloadAccountsDocx()">確認下載</button>
+    </div>
+  </div>
+</div>

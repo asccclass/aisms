@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"isms-privilege/internal/db"
+	"isms-privilege/internal/docxexport"
 	"isms-privilege/internal/mailer"
 	"isms-privilege/internal/models"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -21,6 +24,7 @@ type Handler struct {
 
 var dashboardProviders = []models.DashboardFormProvider{
 	{Key: "privileged_accounts", Label: "特殊權限帳號資料", Description: "使用 privileged_accounts 資料表作為首頁表單資料來源"},
+	{Key: "system_platform_requests", Label: "系統平台申請資料", Description: "使用 system_platform_requests 資料表作為首頁表單資料來源"},
 	{Key: "placeholder", Label: "示範骨架 / 尚未接資料", Description: "保留表單卡片與說明，首頁顯示空狀態"},
 	{Key: "custom_table_template", Label: "自訂資料表範本", Description: "作為未來接新資料表的 provider 樣板，預設先回傳空資料"},
 }
@@ -57,21 +61,20 @@ func generateToken() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
+func (h *Handler) getAccountsForRequest(r *http.Request) ([]models.PrivilegedAccount, error) {
+	status := r.URL.Query().Get("status")
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if q != "" {
+		return h.DB.SearchAccounts(q)
+	}
+	return h.DB.ListAccounts(status)
+}
+
 // ---- Accounts CRUD ----
 
 // GET /api/accounts?status=active&q=keyword
 func (h *Handler) ListAccounts(w http.ResponseWriter, r *http.Request) {
-	status := r.URL.Query().Get("status")
-	q := r.URL.Query().Get("q")
-	var (
-		accounts []models.PrivilegedAccount
-		err      error
-	)
-	if q != "" {
-		accounts, err = h.DB.SearchAccounts(q)
-	} else {
-		accounts, err = h.DB.ListAccounts(status)
-	}
+	accounts, err := h.getAccountsForRequest(r)
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
@@ -80,6 +83,194 @@ func (h *Handler) ListAccounts(w http.ResponseWriter, r *http.Request) {
 		accounts = []models.PrivilegedAccount{}
 	}
 	writeJSON(w, 200, accounts)
+}
+
+func (h *Handler) ExportAccountsDOCX(w http.ResponseWriter, r *http.Request) {
+	accounts, err := h.getAccountsForRequest(r)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	templatePath := filepath.Join("assets", "templates", "ISMS-04-062-template.docx")
+	docx, err := docxexport.Generate(docxexport.ExportOptions{
+		TemplatePath: templatePath,
+		FormName:     "特殊權限帳號盤點清冊",
+		FormCode:     "ISMS-04-062",
+		Version:      "1.4",
+		Department:   firstNonEmpty(os.Getenv("DOCX_OWNER_DEPARTMENT"), "資安科"),
+		InventoryBy:  firstNonEmpty(r.URL.Query().Get("inventory_by"), os.Getenv("DOCX_INVENTORY_BY"), GetUserEmail(r)),
+		GroupLeader:  firstNonEmpty(r.URL.Query().Get("group_leader"), os.Getenv("DOCX_GROUP_LEADER")),
+		Accounts:     accounts,
+	})
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	filename := buildExportFilename(accounts)
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename*=UTF-8''%s", filename))
+	w.Header().Set("Content-Length", strconv.Itoa(len(docx)))
+	_, _ = w.Write(docx)
+}
+
+func buildExportFilename(accounts []models.PrivilegedAccount) string {
+	datePart := time.Now().Format("20060102")
+	if len(accounts) > 0 && strings.TrimSpace(accounts[0].InventoryDate) != "" {
+		datePart = strings.TrimSpace(accounts[0].InventoryDate)
+	}
+	return fmt.Sprintf("ISMS-04-062_特殊權限帳號盤點清冊_%s.docx", datePart)
+}
+
+func buildPlatformRequestExportFilename(req models.SystemPlatformRequest) string {
+	datePart := strings.TrimSpace(req.RequestDate)
+	if datePart == "" {
+		datePart = time.Now().Format("20060102")
+	}
+	systemName := sanitizeFilenamePart(firstNonEmpty(req.SystemName, "system-platform-request"))
+	return fmt.Sprintf("ISMS-04-078_系統平台申請表_%s_%s.docx", systemName, datePart)
+}
+
+func sanitizeFilenamePart(value string) string {
+	replacer := strings.NewReplacer(
+		`\\`, "_",
+		`/`, "_",
+		`:`, "_",
+		`*`, "_",
+		`?`, "_",
+		`"`, "_",
+		`<`, "_",
+		`>`, "_",
+		`|`, "_",
+		" ", "_",
+	)
+	return strings.Trim(strings.TrimSpace(replacer.Replace(value)), "._")
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// ---- System Platform Requests CRUD ----
+
+func (h *Handler) ListSystemPlatformRequests(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.DB.ListSystemPlatformRequests()
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, rows)
+}
+
+func (h *Handler) GetSystemPlatformRequest(w http.ResponseWriter, r *http.Request) {
+	id, err := idFromPath(r, "/api/platform-requests/")
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+		return
+	}
+	row, err := h.DB.GetSystemPlatformRequest(id)
+	if err != nil {
+		writeJSON(w, 404, map[string]string{"error": "not found"})
+		return
+	}
+	writeJSON(w, 200, row)
+}
+
+func (h *Handler) CreateSystemPlatformRequest(w http.ResponseWriter, r *http.Request) {
+	var req models.SystemPlatformRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+	req.Creator = GetUserEmail(r)
+	if strings.TrimSpace(req.Status) == "" {
+		req.Status = "active"
+	}
+	id, err := h.DB.CreateSystemPlatformRequest(&req)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	req.ID = int(id)
+	writeJSON(w, 201, req)
+}
+
+func (h *Handler) UpdateSystemPlatformRequest(w http.ResponseWriter, r *http.Request) {
+	id, err := idFromPath(r, "/api/platform-requests/")
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+		return
+	}
+	var req models.SystemPlatformRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+	req.ID = id
+	existing, _ := h.DB.GetSystemPlatformRequest(id)
+	if existing != nil {
+		req.Creator = existing.Creator
+	}
+	if err := h.DB.UpdateSystemPlatformRequest(&req); err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, req)
+}
+
+func (h *Handler) DeleteSystemPlatformRequest(w http.ResponseWriter, r *http.Request) {
+	id, err := idFromPath(r, "/api/platform-requests/")
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+		return
+	}
+	if err := h.DB.DeleteSystemPlatformRequest(id); err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]string{"message": "deleted"})
+}
+
+func (h *Handler) ExportSystemPlatformRequestDOCX(w http.ResponseWriter, r *http.Request) {
+	id, err := idFromPath(r, "/api/platform-requests/")
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+		return
+	}
+	req, err := h.DB.GetSystemPlatformRequest(id)
+	if err != nil {
+		writeJSON(w, 404, map[string]string{"error": "not found"})
+		return
+	}
+
+	templatePath := filepath.Join("assets", "templates", "ISMS-04-078-template.docx")
+	docx, err := docxexport.GeneratePlatformRequest(docxexport.PlatformRequestExportOptions{
+		TemplatePath: templatePath,
+		FormName:     "系統平台申請表",
+		FormCode:     "ISMS-04-078",
+		Version:      "1.0",
+		Department:   firstNonEmpty(os.Getenv("DOCX_PLATFORM_OWNER_DEPARTMENT"), "系統科"),
+		HandlerName:  strings.TrimSpace(r.URL.Query().Get("handler_name")),
+		ManagerName:  strings.TrimSpace(r.URL.Query().Get("manager_name")),
+		ReviewNotes:  strings.TrimSpace(r.URL.Query().Get("review_notes")),
+		Request:      *req,
+	})
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	filename := buildPlatformRequestExportFilename(*req)
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename*=UTF-8''%s", filename))
+	w.Header().Set("Content-Length", strconv.Itoa(len(docx)))
+	_, _ = w.Write(docx)
 }
 
 // GET /api/accounts/{id}
@@ -460,12 +651,15 @@ func (h *Handler) ListDashboardRecords(w http.ResponseWriter, r *http.Request) {
 // 5. 在 dashboardProviders 清單加入新 provider，前端表單管理頁就能選到。
 //
 // 範例：
-//   case "asset_inventory":
-//     return h.loadAssetInventoryDashboardRecords()
+//
+//	case "asset_inventory":
+//	  return h.loadAssetInventoryDashboardRecords()
 func (h *Handler) loadDashboardRecords(form models.DashboardForm) ([]models.DashboardRecord, error) {
 	switch form.ProviderKey {
 	case "privileged_accounts":
 		return h.loadPrivilegedAccountDashboardRecords()
+	case "system_platform_requests":
+		return h.loadSystemPlatformRequestDashboardRecords()
 	case "placeholder":
 		return h.loadPlaceholderDashboardRecords()
 	case "custom_table_template":
@@ -500,6 +694,33 @@ func (h *Handler) loadPrivilegedAccountDashboardRecords() ([]models.DashboardRec
 
 func (h *Handler) loadPlaceholderDashboardRecords() ([]models.DashboardRecord, error) {
 	return []models.DashboardRecord{}, nil
+}
+
+func (h *Handler) loadSystemPlatformRequestDashboardRecords() ([]models.DashboardRecord, error) {
+	rows, err := h.DB.ListSystemPlatformRequests()
+	if err != nil {
+		return nil, err
+	}
+	records := make([]models.DashboardRecord, 0, len(rows))
+	for _, row := range rows {
+		secondary := strings.TrimSpace(row.SystemAlias)
+		if secondary == "" {
+			secondary = row.EnvironmentType
+		} else {
+			secondary = fmt.Sprintf("%s / %s", row.SystemAlias, row.EnvironmentType)
+		}
+		records = append(records, models.DashboardRecord{
+			ID:            row.ID,
+			PrimaryName:   row.SystemName,
+			SecondaryName: secondary,
+			OwnerName:     row.ApplicantName,
+			Status:        row.Status,
+			InventoryDate: row.RequestDate,
+			UpdatedAt:     row.UpdatedAt,
+			Email:         row.Email,
+		})
+	}
+	return records, nil
 }
 
 func (h *Handler) loadCustomTableTemplateDashboardRecords() ([]models.DashboardRecord, error) {
@@ -611,6 +832,14 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 		}
 	}))
 
+	mux.HandleFunc("/api/accounts/export-docx", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			h.ExportAccountsDOCX(w, r)
+			return
+		}
+		http.Error(w, "method not allowed", 405)
+	}))
+
 	mux.HandleFunc("/api/accounts/", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		if strings.HasSuffix(path, "/notify") {
@@ -628,6 +857,38 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 			h.UpdateAccount(w, r)
 		case http.MethodDelete:
 			h.DeleteAccount(w, r)
+		default:
+			http.Error(w, "method not allowed", 405)
+		}
+	}))
+
+	mux.HandleFunc("/api/platform-requests", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			h.ListSystemPlatformRequests(w, r)
+		case http.MethodPost:
+			h.CreateSystemPlatformRequest(w, r)
+		default:
+			http.Error(w, "method not allowed", 405)
+		}
+	}))
+
+	mux.HandleFunc("/api/platform-requests/", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/export-docx") {
+			if r.Method == http.MethodGet {
+				h.ExportSystemPlatformRequestDOCX(w, r)
+			} else {
+				http.Error(w, "method not allowed", 405)
+			}
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			h.GetSystemPlatformRequest(w, r)
+		case http.MethodPut:
+			h.UpdateSystemPlatformRequest(w, r)
+		case http.MethodDelete:
+			h.DeleteSystemPlatformRequest(w, r)
 		default:
 			http.Error(w, "method not allowed", 405)
 		}

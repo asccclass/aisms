@@ -1,0 +1,14 @@
+<div class="modal-overlay" id="notify-modal">
+  <div class="modal" style="max-width:480px;">
+    <h3>📧 發送確認通知</h3>
+    <div class="notify-info" id="notify-info-box"></div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">
+      系統將發送 Email 給使用者，提供連結讓其線上確認是否繼續使用此特殊權限帳號。
+      確認連結有效期限為 <strong>7 天</strong>。
+    </p>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('notify-modal')">取消</button>
+      <button class="btn btn-success" onclick="doNotify()">✉️ 確認發送</button>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,26 @@
+<div class="modal-overlay" id="platform-request-export-modal">
+  <div class="modal" style="max-width: 560px;">
+    <h3>⬇ 匯出 04-078 DOCX</h3>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">
+      匯出前可先補填系統科辦理結果欄位，下載的 Word 檔會自動帶入承辦人、權責主管與審查意見。
+    </p>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>承辦人</label>
+        <input class="form-control" id="platform-export-handler" placeholder="例如：王小明">
+      </div>
+      <div class="form-group">
+        <label>權責主管</label>
+        <input class="form-control" id="platform-export-manager" placeholder="例如：陳主管">
+      </div>
+      <div class="form-group full">
+        <label>審查意見</label>
+        <textarea class="form-control" id="platform-export-review-notes" rows="4" placeholder="例如：同意上架，請依規定提供安裝文件與測試報告"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('platform-request-export-modal')">取消</button>
+      <button class="btn btn-primary" onclick="confirmDownloadPlatformRequestDocx()">確認下載</button>
+    </div>
+  </div>
+</div>

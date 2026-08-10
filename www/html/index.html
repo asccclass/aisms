@@ -254,8 +254,57 @@
 	.logout-btn:hover { background: #b91c1c; }
 
   /* ── User Profile (Top Right) ── */
-  .user-profile { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text-muted); }
-  .user-profile strong { color: var(--text); font-weight: 600; }
+  .user-profile {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 14px;
+    color: var(--text-muted);
+    background: rgba(255,255,255,.92);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 10px 12px;
+    min-width: 250px;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, .06);
+    cursor: pointer;
+  }
+  .user-profile:hover { border-color: #cbd5e1; }
+  .user-profile strong { color: var(--text); font-weight: 700; }
+  .user-profile-body { display: grid; gap: 4px; min-width: 0; }
+  .user-profile-name { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--text); }
+  .user-profile-meta { font-size: 11px; color: var(--text-muted); line-height: 1.5; word-break: break-word; }
+  .user-profile-detail { display: none; }
+  .user-profile.expanded .user-profile-detail { display: block; }
+  .user-profile-toggle {
+    font-size: 11px;
+    color: var(--primary-light);
+    background: #eef6ff;
+    border-radius: 999px;
+    padding: 2px 6px;
+    white-space: nowrap;
+  }
+  .user-profile-meta code {
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 11px;
+    background: #eef2f7;
+    color: var(--primary);
+    padding: 1px 5px;
+    border-radius: 999px;
+  }
+  .user-avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+    object-fit: cover;
+    border: 1px solid var(--border);
+    background: #fff;
+  }
+  .user-avatar-fallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #e2e8f0;
+  }
   .hint { font-size: 12px; color: var(--text-muted); }
   .stack { display: grid; gap: 14px; }
   .mono { font-family: Consolas, 'Courier New', monospace; }
@@ -272,6 +321,9 @@
   @media (max-width: 600px) {
     .sidebar { display: none; }
     .main { margin-left: 0; }
+    .user-profile { min-width: 0; width: 100%; }
+    .topbar { flex-direction: column; align-items: stretch; gap: 12px; }
+    .topbar-actions { flex-wrap: wrap; }
   }
 </style>
 </head>
@@ -288,6 +340,9 @@
       </button>
       <button class="nav-item" onclick="showPage('accounts', event)">
         <span class="icon">👤</span> 04-062特殊權限帳號管理
+      </button>
+      <button class="nav-item" onclick="showPage('platform-requests', event)">
+        <span class="icon">🖥️</span> 04-078系統平台申請
       </button>
       <button class="nav-item" onclick="showPage('forms', event)">
         <span class="icon">🗂️</span> 表單管理
@@ -344,6 +399,7 @@
         <h2>👤 04-062特殊權限帳號管理</h2>
         <div class="topbar-actions">
           <div class="user-profile" id="user-profile-acc"></div>
+          <button class="btn btn-ghost" onclick="downloadAccountsDocx()">⬇ 下載 DOCX</button>
           <button class="btn btn-primary" onclick="openCreate()">＋ 新增帳號</button>
         </div>
       </div>
@@ -393,6 +449,38 @@
       </div>
     </div>
 
+    <div class="page" id="page-platform-requests">
+      <div class="topbar">
+        <h2>🖥️ 04-078系統平台申請</h2>
+        <div class="topbar-actions">
+          <div class="user-profile" id="user-profile-platform"></div>
+          <button class="btn btn-primary" onclick="openPlatformRequestCreate()">＋ 新增申請</button>
+        </div>
+      </div>
+      <div class="panel" style="margin-bottom:16px;">
+        <h3>申請資料輸入</h3>
+        <p class="panel-desc">依 ISMS-04-078 樣板紀錄主機申請、環境、作業系統、備份與特殊需求等欄位。</p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#ID</th>
+              <th>系統名稱</th>
+              <th>申請人 / 單位</th>
+              <th>申請樣態 / 日期</th>
+              <th>作業系統 / 容量</th>
+              <th>使用期間</th>
+              <th>Email</th>
+              <th>狀態</th>
+              <th width="150">操作</th>
+            </tr>
+          </thead>
+          <tbody id="platform-requests-body"></tbody>
+        </table>
+      </div>
+    </div>
+
     <div class="page" id="page-forms">
       <div class="topbar">
         <h2>🗂️ 表單管理</h2>
@@ -409,195 +497,6 @@
     </div>
 
   </main>
-</div>
-
-<!-- ═══ Account Modal ═══ -->
-<div class="modal-overlay" id="account-modal">
-  <div class="modal">
-    <h3 id="modal-title">新增特殊權限帳號</h3>
-    <div class="form-grid">
-      <div class="form-group">
-        <label>系統名稱 *</label>
-        <input class="form-control" id="f-system_name" placeholder="e.g. Sysldap">
-      </div>
-      <div class="form-group">
-        <label>類別 *</label>
-        <select class="form-control" id="f-environment">
-          <option value="開發區">開發區</option>
-          <option value="測試區">測試區</option>
-          <option value="正式區" selected>正式區</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>IP 位址 *</label>
-        <input class="form-control" id="f-ip_address" placeholder="e.g. 10.109.4.9">
-      </div>
-      <div class="form-group">
-        <label>盤點日期 *</label>
-        <input class="form-control" id="f-inventory_date" placeholder="e.g. 20260803">
-      </div>
-      <div class="form-group">
-        <label>帳號名稱 *</label>
-        <input class="form-control" id="f-account_name" placeholder="e.g. root">
-      </div>
-      <div class="form-group">
-        <label>帳號種類 *</label>
-        <select class="form-control" id="f-account_type">
-          <option value="預設">預設</option>
-          <option value="系統管理用">系統管理用</option>
-          <option value="關閉帳號">關閉帳號</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>通行碼定期變更</label>
-        <select class="form-control" id="f-passphrase_rotate">
-          <option value="是">是</option>
-          <option value="否">否</option>
-          <option value="NA">NA</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>單位名稱</label>
-        <input type="text" class="form-control" id="f-department" placeholder="例如：資安組">
-      </div>
-      <div class="form-group">
-        <label>單位代碼</label>
-        <input type="text" class="form-control" id="f-department_code" placeholder="例如：A01">
-      </div>
-      <div class="form-group">
-        <label>使用者姓名</label>
-        <input class="form-control" id="f-owner_name" placeholder="e.g. 顏景喆">
-      </div>
-      <div class="form-group full">
-        <label>Email（用於確認通知）</label>
-        <input class="form-control" id="f-email" type="email" placeholder="user@example.com">
-      </div>
-      <div class="form-group">
-        <label>狀態</label>
-        <select class="form-control" id="f-status">
-          <option value="active">使用中</option>
-          <option value="pending">待確認</option>
-          <option value="closed">已關閉</option>
-          <option value="expired">已過期</option>
-        </select>
-      </div>
-      <div class="form-group full">
-        <label>備註</label>
-        <textarea class="form-control" id="f-remarks" rows="2" placeholder="選填"></textarea>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('account-modal')">取消</button>
-      <button class="btn btn-primary" onclick="saveAccount()">💾 儲存</button>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ Notify Modal ═══ -->
-<div class="modal-overlay" id="notify-modal">
-  <div class="modal" style="max-width:480px;">
-    <h3>📧 發送確認通知</h3>
-    <div class="notify-info" id="notify-info-box"></div>
-    <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">
-      系統將發送 Email 給使用者，提供連結讓其線上確認是否繼續使用此特殊權限帳號。
-      確認連結有效期限為 <strong>7 天</strong>。
-    </p>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('notify-modal')">取消</button>
-      <button class="btn btn-success" onclick="doNotify()">✉️ 確認發送</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-overlay" id="form-config-modal">
-  <div class="modal" style="max-width:760px;">
-    <h3 id="form-config-title">新增表單設定</h3>
-    <div class="form-grid">
-      <div class="form-group">
-        <label>表單 Key *</label>
-        <input class="form-control mono" id="ff-key" placeholder="e.g. isms-04-062">
-      </div>
-      <div class="form-group">
-        <label>表單代碼 *</label>
-        <input class="form-control" id="ff-code" placeholder="e.g. ISMS-04-062">
-      </div>
-      <div class="form-group">
-        <label>短代碼 *</label>
-        <input class="form-control" id="ff-short_code" placeholder="e.g. 04-062">
-      </div>
-      <div class="form-group">
-        <label>顯示順序 *</label>
-        <input class="form-control" id="ff-display_order" type="number" min="1" value="1">
-      </div>
-      <div class="form-group full">
-        <label>表單名稱 *</label>
-        <input class="form-control" id="ff-name" placeholder="e.g. 特殊權限帳號管理">
-      </div>
-      <div class="form-group full">
-        <label>表單描述</label>
-        <textarea class="form-control" id="ff-description" rows="2" placeholder="首頁卡片說明"></textarea>
-      </div>
-      <div class="form-group">
-        <label>資料來源 Provider *</label>
-        <select class="form-control" id="ff-provider_key"></select>
-      </div>
-      <div class="form-group">
-        <label>啟用狀態</label>
-        <select class="form-control" id="ff-enabled">
-          <option value="true">啟用</option>
-          <option value="false">停用</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>明細標題</label>
-        <input class="form-control" id="ff-detail_title" placeholder="e.g. 最近盤點清單">
-      </div>
-      <div class="form-group">
-        <label>空資料提示</label>
-        <input class="form-control" id="ff-empty_text" placeholder="e.g. 尚無資料">
-      </div>
-      <div class="form-group">
-        <label>正常狀態文字</label>
-        <input class="form-control" id="ff-status_normal_text" placeholder="e.g. 狀況正常">
-      </div>
-      <div class="form-group">
-        <label>需追蹤文字</label>
-        <input class="form-control" id="ff-status_needs_attention_text" placeholder="e.g. 需追蹤">
-      </div>
-      <div class="form-group">
-        <label>提醒一標題</label>
-        <input class="form-control" id="ff-active_title" placeholder="e.g. 使用中帳號">
-      </div>
-      <div class="form-group">
-        <label>提醒一說明</label>
-        <input class="form-control" id="ff-active_meta" placeholder="提醒說明">
-      </div>
-      <div class="form-group">
-        <label>提醒二標題</label>
-        <input class="form-control" id="ff-pending_title" placeholder="e.g. 待確認帳號">
-      </div>
-      <div class="form-group">
-        <label>提醒二說明</label>
-        <input class="form-control" id="ff-pending_meta" placeholder="提醒說明">
-      </div>
-      <div class="form-group">
-        <label>提醒三標題</label>
-        <input class="form-control" id="ff-closed_title" placeholder="e.g. 已關閉帳號">
-      </div>
-      <div class="form-group">
-        <label>提醒三說明</label>
-        <input class="form-control" id="ff-closed_meta" placeholder="提醒說明">
-      </div>
-      <div class="form-group full">
-        <label>最近更新標題</label>
-        <input class="form-control" id="ff-recent_title" placeholder="e.g. 最近更新紀錄">
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('form-config-modal')">取消</button>
-      <button class="btn btn-primary" onclick="saveDashboardForm()">💾 儲存表單設定</button>
-    </div>
-  </div>
 </div>
 
 <!-- ═══ Confirm Delete ═══ -->
@@ -624,576 +523,18 @@
   </div>
 </div>
 
-<script>
-const API = '';
-const DEFAULT_FORM_FOCUS_ITEMS = {
-  active_title: '有效資料',
-  active_meta: '顯示此表單目前有效或啟用中的資料筆數',
-  pending_title: '待處理事項',
-  pending_meta: '顯示此表單待辦、待確認或待補件數量',
-  closed_title: '已完成事項',
-  closed_meta: '顯示此表單已完成、已結案或已停用數量',
-  recent_title: '最近更新紀錄'
-};
-
-let accounts = [];
-let dashboardForms = [];
-let dashboardProviders = [];
-let dashboardRecordsByForm = {};
-let dashboardSelectedFormKey = '';
-let editingId = null;
-let formEditingId = null;
-let notifyId = null;
-let deleteId = null;
-let searchTimer = null;
-
-function normalizeDashboardForm(form) {
-  return {
-    detail_title: '最近資料清單',
-    empty_text: '此表單尚未接入資料來源',
-    status_normal_text: '狀況正常',
-    status_needs_attention_text: '需追蹤',
-    enabled: true,
-    focus_items: { ...DEFAULT_FORM_FOCUS_ITEMS },
-    ...form,
-    focus_items: {
-      ...DEFAULT_FORM_FOCUS_ITEMS,
-      ...(form.focus_items || {})
-    }
-  };
-}
-
-function showPage(name, evt) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.getElementById('page-' + name).classList.add('active');
-  if (evt && evt.currentTarget) evt.currentTarget.classList.add('active');
-  if (name === 'dashboard') loadDashboardPage();
-  if (name === 'accounts') loadAccounts();
-  if (name === 'forms') loadFormsManagement();
-  if (name === 'notifications') loadLogs();
-}
-
-function toast(msg, type='') {
-  const el = document.getElementById('toast');
-  el.textContent = msg; el.className = 'show ' + type;
-  setTimeout(() => el.className = '', 3000);
-}
-
-async function loadDashboardConfig() {
-  const [formsRes, providersRes] = await Promise.all([
-    fetch(API + '/api/dashboard-forms'),
-    fetch(API + '/api/dashboard-providers')
-  ]);
-  dashboardForms = (await formsRes.json()).map(normalizeDashboardForm);
-  dashboardProviders = await providersRes.json();
-  if (!dashboardSelectedFormKey || !dashboardForms.some(f => f.key === dashboardSelectedFormKey)) {
-    const firstEnabled = dashboardForms.find(f => f.enabled);
-    dashboardSelectedFormKey = firstEnabled ? firstEnabled.key : (dashboardForms[0]?.key || '');
-  }
-}
-
-async function loadStats() {
-  const r = await fetch(API + '/api/stats');
-  const s = await r.json();
-  document.getElementById('stat-forms').textContent = dashboardForms.filter(f => f.enabled).length;
-  document.getElementById('stat-active').textContent = s.active || 0;
-  document.getElementById('stat-pending').textContent = s.pending || 0;
-  document.getElementById('stat-closed').textContent = s.closed || 0;
-}
-
-async function loadDashboardAccounts() {
-  const r = await fetch(API + '/api/accounts?status=all');
-  accounts = await r.json();
-}
-
-async function loadDashboardRecords() {
-  const enabledForms = dashboardForms.filter(f => f.enabled);
-  const results = await Promise.all(enabledForms.map(async form => {
-    const r = await fetch(API + '/api/dashboard-records?form_key=' + encodeURIComponent(form.key));
-    const data = r.ok ? await r.json() : [];
-    return [form.key, data];
-  }));
-  dashboardRecordsByForm = Object.fromEntries(results);
-}
-
-async function loadDashboardPage() {
-  await loadDashboardConfig();
-  await Promise.all([loadDashboardAccounts(), loadDashboardRecords()]);
-  await loadStats();
-  renderDashboard();
-}
-
-function loadFormData(form) {
-  return dashboardRecordsByForm[form.key] || [];
-}
-
-function renderDashboard() {
-  renderFormsGrid();
-  renderSelectedForm();
-}
-
-function renderFormsGrid() {
-  const enabledForms = dashboardForms.filter(form => form.enabled);
-  const html = enabledForms.map(form => {
-    const formData = loadFormData(form);
-    const total = formData.length;
-    const active = countByStatus(formData, 'active');
-    const pending = countByStatus(formData, 'pending');
-    const lastUpdated = getLastUpdatedRecord(formData);
-    return `
-      <div class="form-tile ${form.key === dashboardSelectedFormKey ? 'active' : ''}">
-        <div class="form-tile-head">
-          <div>
-            <div class="form-code">${esc(form.code)}</div>
-            <h4>${esc(form.name)}</h4>
-            <p>${esc(form.description)}</p>
-          </div>
-          <div>${pending > 0 ? `<span class="badge badge-pending">${esc(form.status_needs_attention_text)}</span>` : `<span class="badge badge-active">${esc(form.status_normal_text)}</span>`}</div>
-        </div>
-        <div class="form-tile-metrics">
-          <div class="form-tile-metric"><div class="label">紀錄數</div><div class="value">${total}</div></div>
-          <div class="form-tile-metric"><div class="label">使用中</div><div class="value">${active}</div></div>
-          <div class="form-tile-metric"><div class="label">待確認</div><div class="value">${pending}</div></div>
-        </div>
-        <div style="margin-top:14px;display:flex;justify-content:space-between;align-items:center;gap:12px;">
-          <span class="hint">${lastUpdated ? `最近更新：${formatDate(lastUpdated.updated_at || lastUpdated.created_at)}` : '尚無資料'}</span>
-          <button class="btn btn-ghost btn-sm" onclick="selectDashboardForm('${escAttr(form.key)}')">查看明細</button>
-        </div>
-      </div>`;
-  }).join('');
-  document.getElementById('dashboard-forms-grid').innerHTML = html ? `<div class="forms-grid">${html}</div>` : `<div class="empty"><div class="icon">🗂️</div><p>尚無啟用中的表單</p></div>`;
-}
-
-function selectDashboardForm(formKey) {
-  dashboardSelectedFormKey = formKey;
-  renderDashboard();
-}
-
-function renderSelectedForm() {
-  const form = dashboardForms.find(x => x.key === dashboardSelectedFormKey && x.enabled) || dashboardForms.find(x => x.enabled) || dashboardForms[0];
-  if (!form) {
-    document.getElementById('dashboard-form-summary').innerHTML = '';
-    document.getElementById('dashboard-status-list').innerHTML = '';
-    document.getElementById('dashboard-table').innerHTML = `<div class="empty"><div class="icon">🗂️</div><p>尚無表單設定</p></div>`;
-    return;
-  }
-  const list = loadFormData(form);
-  renderDashboardSummary(form, list);
-  renderDashboardFocus(form, list);
-  renderDashboardRecentList(form, list);
-}
-
-function renderDashboardRecentList(form, list) {
-  const top10 = [...list].sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0)).slice(0, 10);
-  const tbody = top10.map(a => `
-    <div class="dashboard-row">
-      <span style="color:var(--text-muted);width:28px;">#${a.id}</span>
-      <div class="dashboard-row-main">
-        <div class="dashboard-row-title">${esc(a.primary_name)} ${statusBadge(a.status)}</div>
-        <div class="dashboard-row-meta">${esc(a.secondary_name) || '未分類'}<br>使用者：${esc(a.owner_name) || '未填寫'} ｜ 盤點日：${esc(a.inventory_date) || '未填寫'} ｜ 更新：${formatDateTime(a.updated_at || a.created_at)}</div>
-      </div>
-    </div>`).join('');
-  document.getElementById('dashboard-detail-title').textContent = `${form.short_code} ${form.detail_title}`;
-  document.getElementById('dashboard-detail-desc').textContent = `顯示 ${form.short_code} ${form.name} 的最近更新資料。`;
-  document.getElementById('dashboard-table').innerHTML = tbody || `<div class="empty"><div class="icon">📋</div><p>${esc(form.empty_text)}</p></div>`;
-}
-
-function renderDashboardSummary(form, list) {
-  const total = list.length;
-  const pending = countByStatus(list, 'pending');
-  const expired = countByStatus(list, 'expired');
-  const withEmail = list.filter(a => a.email).length;
-  const lastUpdated = getLastUpdatedRecord(list);
-  document.getElementById('dashboard-form-summary').innerHTML = `
-    <div class="form-summary-card">
-      <div class="form-summary-head">
-        <div>
-          <div class="form-code">${esc(form.code)}</div>
-          <h4>${esc(form.name)}</h4>
-          <p>${esc(form.description)}</p>
-        </div>
-        <div>${pending > 0 ? `<span class="badge badge-pending">${esc(form.status_needs_attention_text)}</span>` : `<span class="badge badge-active">${esc(form.status_normal_text)}</span>`}</div>
-      </div>
-      <div class="summary-metrics">
-        <div class="metric-box"><div class="label">表單紀錄數</div><div class="value">${total}</div></div>
-        <div class="metric-box"><div class="label">最近更新</div><div class="value" style="font-size:16px;">${lastUpdated ? formatDateTime(lastUpdated.updated_at || lastUpdated.created_at) : '尚無資料'}</div></div>
-        <div class="metric-box"><div class="label">待確認 / 已過期</div><div class="value">${pending} / ${expired}</div></div>
-        <div class="metric-box"><div class="label">具 Email 帳號</div><div class="value">${withEmail}</div></div>
-      </div>
-    </div>`;
-}
-
-function renderDashboardFocus(form, list) {
-  const active = countByStatus(list, 'active');
-  const pending = countByStatus(list, 'pending');
-  const closed = countByStatus(list, 'closed');
-  const lastUpdated = getLastUpdatedRecord(list);
-  const focus = form.focus_items || DEFAULT_FORM_FOCUS_ITEMS;
-  document.getElementById('dashboard-focus-title').textContent = `${form.short_code} 重點提醒`;
-  document.getElementById('dashboard-focus-desc').textContent = `快速檢視 ${form.short_code} ${form.name} 目前最需要處理的項目。`;
-  document.getElementById('dashboard-status-list').innerHTML = `
-    <div class="status-list">
-      <div class="status-item"><div><div class="title">${esc(focus.active_title)}</div><div class="meta">${esc(focus.active_meta)}</div></div><div class="count">${active}</div></div>
-      <div class="status-item"><div><div class="title">${esc(focus.pending_title)}</div><div class="meta">${esc(focus.pending_meta)}</div></div><div class="count" style="color:var(--warning);">${pending}</div></div>
-      <div class="status-item"><div><div class="title">${esc(focus.closed_title)}</div><div class="meta">${esc(focus.closed_meta)}</div></div><div class="count" style="color:var(--danger);">${closed}</div></div>
-      <div class="status-item"><div><div class="title">${esc(focus.recent_title)}</div><div class="meta">${lastUpdated ? `${esc(lastUpdated.primary_name)} / ${esc(lastUpdated.secondary_name)}` : '尚無資料'}</div></div><div class="count" style="font-size:14px;">${lastUpdated ? formatDate(lastUpdated.updated_at || lastUpdated.created_at) : '—'}</div></div>
-    </div>`;
-}
-
-async function loadAccounts() {
-  const status = document.getElementById('status-filter').value;
-  const q = document.getElementById('search-input').value.trim();
-  let url = API + '/api/accounts';
-  const params = new URLSearchParams();
-  if (q) params.set('q', q);
-  else if (status !== 'all') params.set('status', status);
-  if ([...params].length) url += '?' + params;
-  const r = await fetch(url);
-  accounts = await r.json();
-  renderAccounts(accounts);
-}
-
-function renderAccounts(list) {
-  const tbody = document.getElementById('accounts-body');
-  if (!list || !list.length) {
-    tbody.innerHTML = `<tr><td colspan="9"><div class="empty"><div class="icon">🔍</div><p>無符合資料</p></div></td></tr>`;
-    return;
-  }
-  tbody.innerHTML = list.map(a => `
-    <tr>
-      <td style="color:var(--text-muted);font-size:12px;">#${a.id}</td>
-      <td>${esc(a.system_name)}<br><span style="font-size:12px;color:var(--text-muted);">${esc(a.environment)}</span></td>
-      <td>${esc(a.ip_address)}<br><span style="font-size:12px;color:var(--text-muted);">${esc(a.inventory_date)}</span></td>
-      <td>${esc(a.department)}<br><span style="font-size:12px;color:var(--text-muted);">${esc(a.department_code)}</span></td>
-      <td><strong>${esc(a.account_name)}</strong><br>${accountTypeBadge(a.account_type)}</td>
-      <td>${esc(a.owner_name)}<br><span style="font-size:12px;color:var(--text-muted);">${esc(a.email)}</span></td>
-      <td>${statusBadge(a.status)}</td>
-      <td style="font-size:12px;color:var(--text-muted);">${esc(a.creator)}</td>
-      <td><div class="actions"><button class="btn btn-ghost btn-sm" onclick="openEdit(${a.id})">✏️</button><button class="btn btn-warning btn-sm" onclick="openNotify(${a.id})" ${!a.email ? 'disabled' : ''}>📧</button><button class="btn btn-danger btn-sm" onclick="confirmDelete(${a.id}, '${escAttr(a.account_name)}')">🗑️</button></div></td>
-    </tr>`).join('');
-}
-
-function debounceSearch() {
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(loadAccounts, 350);
-}
-
-function openCreate() {
-  editingId = null;
-  document.getElementById('modal-title').textContent = '新增特殊權限帳號';
-  clearForm();
-  document.getElementById('f-inventory_date').value = new Date().toISOString().slice(0,10).replace(/-/g,'');
-  document.getElementById('account-modal').classList.add('open');
-}
-
-async function openEdit(id) {
-  editingId = id;
-  document.getElementById('modal-title').textContent = '編輯帳號 #' + id;
-  const r = await fetch(API + '/api/accounts/' + id);
-  fillForm(await r.json());
-  document.getElementById('account-modal').classList.add('open');
-}
-
-function fillForm(a) {
-  ['system_name','environment','ip_address','inventory_date','account_name','account_type','department','department_code','owner_name','email','passphrase_rotate','status','remarks'].forEach(f => {
-    const el = document.getElementById('f-' + f);
-    if (el) el.value = a[f] || '';
-  });
-}
-
-function clearForm() {
-  ['system_name','ip_address','inventory_date','account_name','department','department_code','owner_name','email','remarks'].forEach(f => {
-    const el = document.getElementById('f-' + f);
-    if (el) el.value = '';
-  });
-  document.getElementById('f-account_type').value = '系統管理用';
-  document.getElementById('f-environment').value = '正式區';
-  document.getElementById('f-passphrase_rotate').value = '是';
-  document.getElementById('f-status').value = 'active';
-}
-
-async function saveAccount() {
-  const payload = {};
-  ['system_name','environment','ip_address','inventory_date','account_name','account_type','department','department_code','owner_name','email','passphrase_rotate','status','remarks'].forEach(f => payload[f] = document.getElementById('f-' + f).value);
-  if (!payload.system_name || !payload.account_name) return toast('請填寫必填欄位', 'error');
-  const url = editingId ? API + '/api/accounts/' + editingId : API + '/api/accounts';
-  const method = editingId ? 'PUT' : 'POST';
-  const r = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-  if (!r.ok) {
-    const err = await r.json();
-    return toast('錯誤：' + (err.error || '操作失敗'), 'error');
-  }
-  toast(editingId ? '帳號已更新 ✅' : '帳號已新增 ✅', 'success');
-  closeModal('account-modal');
-  await Promise.all([loadAccounts(), loadDashboardPage()]);
-}
-
-function openNotify(id) {
-  notifyId = id;
-  const a = accounts.find(x => x.id === id);
-  document.getElementById('notify-info-box').innerHTML = a ? `<div><strong>系統：</strong>${esc(a.system_name)} (${esc(a.ip_address)})</div><div><strong>帳號：</strong>${esc(a.account_name)} [${esc(a.account_type)}]</div><div><strong>使用者：</strong>${esc(a.owner_name)}</div><div><strong>Email：</strong>${esc(a.email)}</div>` : '載入中...';
-  document.getElementById('notify-modal').classList.add('open');
-}
-
-async function doNotify() {
-  const r = await fetch(API + '/api/accounts/' + notifyId + '/notify', { method: 'POST' });
-  const j = await r.json();
-  closeModal('notify-modal');
-  if (!r.ok) return toast('發送失敗：' + (j.error || '未知錯誤'), 'error');
-  toast('通知已發送至 ' + j.email, 'success');
-  loadAccounts();
-}
-
-async function notifyAll() {
-  if (!confirm('將對所有「使用中」且有 Email 的帳號發送確認通知，確定繼續？')) return;
-  const btn = event.currentTarget;
-  btn.disabled = true; btn.textContent = '發送中…';
-  const r = await fetch(API + '/api/notify-all', { method: 'POST' });
-  const j = await r.json();
-  btn.disabled = false; btn.innerHTML = '📧 批次通知所有使用中帳號';
-  toast(`發送完成：成功 ${j.sent} 封，失敗 ${j.failed} 封`, j.failed ? 'error' : 'success');
-  loadDashboardPage();
-}
-
-function confirmDelete(id, name) {
-  deleteId = id;
-  document.getElementById('confirm-msg').textContent = `確定要刪除帳號「${name}」(#${id})？此操作無法復原。`;
-  document.getElementById('confirm-ok').onclick = doDelete;
-  document.getElementById('confirm-overlay').classList.add('open');
-}
-
-async function doDelete() {
-  const r = await fetch(API + '/api/accounts/' + deleteId, { method: 'DELETE' });
-  closeConfirm();
-  if (!r.ok) return toast('刪除失敗', 'error');
-  toast('帳號已刪除', 'success');
-  await Promise.all([loadAccounts(), loadDashboardPage()]);
-}
-
-function closeConfirm() { document.getElementById('confirm-overlay').classList.remove('open'); }
-
-async function loadLogs() {
-  const r = await fetch(API + '/api/notification-logs');
-  const logs = await r.json();
-  const tbody = document.getElementById('logs-body');
-  if (!logs.length) {
-    tbody.innerHTML = `<tr><td colspan="7"><div class="empty"><div class="icon">📭</div><p>尚無通知記錄</p></div></td></tr>`;
-    return;
-  }
-  tbody.innerHTML = logs.map(l => `<tr><td>${l.id}</td><td>${l.account_id}</td><td>${esc(l.account_name)}</td><td>${esc(l.email)}</td><td style="font-size:12px;">${new Date(l.sent_at).toLocaleString('zh-TW')}</td><td><span class="log-status-${l.status}">${l.status === 'sent' ? '✅ 成功' : '❌ 失敗'}</span></td><td style="font-size:12px;color:var(--text-muted);">${esc(l.message)}</td></tr>`).join('');
-}
-
-async function loadFormsManagement() {
-  await loadDashboardConfig();
-  renderFormsManagement();
-}
-
-function renderFormsManagement() {
-  const rows = dashboardForms.map((form, index) => `
-    <tr>
-      <td>${index + 1}</td>
-      <td><span class="mono">${esc(form.key)}</span></td>
-      <td>${esc(form.code)}<br><span class="hint">${esc(form.short_code)}</span></td>
-      <td>${esc(form.name)}<br><span class="hint">${esc(form.description || '')}</span></td>
-      <td>${providerLabel(form.provider_key)}</td>
-      <td>${form.enabled ? '<span class="badge badge-active">啟用</span>' : '<span class="badge badge-expired">停用</span>'}</td>
-      <td>
-        <div class="order-actions">
-          <button class="btn btn-ghost btn-sm" onclick="moveDashboardForm(${form.id}, -1)" ${index === 0 ? 'disabled' : ''}>↑</button>
-          <button class="btn btn-ghost btn-sm" onclick="moveDashboardForm(${form.id}, 1)" ${index === dashboardForms.length - 1 ? 'disabled' : ''}>↓</button>
-          <button class="btn btn-ghost btn-sm" onclick="openFormEdit(${form.id})">✏️</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteDashboardForm(${form.id}, '${escAttr(form.name)}')">🗑️</button>
-        </div>
-      </td>
-    </tr>`).join('');
-  document.getElementById('forms-management-list').innerHTML = `
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>順序</th><th>Registry Key</th><th>表單代碼</th><th>名稱 / 說明</th><th>Data Provider</th><th>狀態</th><th width="220">操作</th></tr></thead>
-        <tbody>${rows || `<tr><td colspan="7"><div class="empty"><div class="icon">🗂️</div><p>尚無表單設定</p></div></td></tr>`}</tbody>
-      </table>
-    </div>`;
-}
-
-function providerLabel(key) {
-  const provider = dashboardProviders.find(p => p.key === key);
-  return provider ? `${provider.label}<br><span class="hint mono">${provider.key}</span>` : `<span class="mono">${esc(key)}</span>`;
-}
-
-function renderProviderOptions() {
-  document.getElementById('ff-provider_key').innerHTML = dashboardProviders.map(p => `<option value="${escAttr(p.key)}">${esc(p.label)} (${esc(p.key)})</option>`).join('');
-}
-
-function openFormCreate() {
-  formEditingId = null;
-  renderProviderOptions();
-  document.getElementById('form-config-title').textContent = '新增表單設定';
-  clearDashboardFormForm();
-  document.getElementById('ff-display_order').value = dashboardForms.length + 1;
-  document.getElementById('form-config-modal').classList.add('open');
-}
-
-function openFormEdit(id) {
-  const form = dashboardForms.find(x => x.id === id);
-  if (!form) return;
-  formEditingId = id;
-  renderProviderOptions();
-  document.getElementById('form-config-title').textContent = '編輯表單設定';
-  fillDashboardFormForm(form);
-  document.getElementById('form-config-modal').classList.add('open');
-}
-
-function clearDashboardFormForm() {
-  ['key','code','short_code','name','description','detail_title','empty_text','status_normal_text','status_needs_attention_text','active_title','active_meta','pending_title','pending_meta','closed_title','closed_meta','recent_title'].forEach(id => {
-    const el = document.getElementById('ff-' + id);
-    if (el) el.value = '';
-  });
-  document.getElementById('ff-enabled').value = 'true';
-  if (dashboardProviders[0]) document.getElementById('ff-provider_key').value = dashboardProviders[0].key;
-}
-
-function fillDashboardFormForm(form) {
-  document.getElementById('ff-key').value = form.key || '';
-  document.getElementById('ff-code').value = form.code || '';
-  document.getElementById('ff-short_code').value = form.short_code || '';
-  document.getElementById('ff-name').value = form.name || '';
-  document.getElementById('ff-description').value = form.description || '';
-  document.getElementById('ff-detail_title').value = form.detail_title || '';
-  document.getElementById('ff-empty_text').value = form.empty_text || '';
-  document.getElementById('ff-status_normal_text').value = form.status_normal_text || '';
-  document.getElementById('ff-status_needs_attention_text').value = form.status_needs_attention_text || '';
-  document.getElementById('ff-provider_key').value = form.provider_key || '';
-  document.getElementById('ff-display_order').value = form.display_order || 1;
-  document.getElementById('ff-enabled').value = String(!!form.enabled);
-  const focus = form.focus_items || DEFAULT_FORM_FOCUS_ITEMS;
-  document.getElementById('ff-active_title').value = focus.active_title || '';
-  document.getElementById('ff-active_meta').value = focus.active_meta || '';
-  document.getElementById('ff-pending_title').value = focus.pending_title || '';
-  document.getElementById('ff-pending_meta').value = focus.pending_meta || '';
-  document.getElementById('ff-closed_title').value = focus.closed_title || '';
-  document.getElementById('ff-closed_meta').value = focus.closed_meta || '';
-  document.getElementById('ff-recent_title').value = focus.recent_title || '';
-}
-
-async function saveDashboardForm() {
-  const payload = {
-    key: document.getElementById('ff-key').value.trim(),
-    code: document.getElementById('ff-code').value.trim(),
-    short_code: document.getElementById('ff-short_code').value.trim(),
-    name: document.getElementById('ff-name').value.trim(),
-    description: document.getElementById('ff-description').value.trim(),
-    detail_title: document.getElementById('ff-detail_title').value.trim(),
-    empty_text: document.getElementById('ff-empty_text').value.trim(),
-    status_normal_text: document.getElementById('ff-status_normal_text').value.trim(),
-    status_needs_attention_text: document.getElementById('ff-status_needs_attention_text').value.trim(),
-    provider_key: document.getElementById('ff-provider_key').value,
-    display_order: Number(document.getElementById('ff-display_order').value || 1),
-    enabled: document.getElementById('ff-enabled').value === 'true',
-    focus_items: {
-      active_title: document.getElementById('ff-active_title').value.trim(),
-      active_meta: document.getElementById('ff-active_meta').value.trim(),
-      pending_title: document.getElementById('ff-pending_title').value.trim(),
-      pending_meta: document.getElementById('ff-pending_meta').value.trim(),
-      closed_title: document.getElementById('ff-closed_title').value.trim(),
-      closed_meta: document.getElementById('ff-closed_meta').value.trim(),
-      recent_title: document.getElementById('ff-recent_title').value.trim()
-    }
-  };
-  if (!payload.key || !payload.code || !payload.short_code || !payload.name) return toast('請填寫表單必要欄位', 'error');
-  const url = formEditingId ? API + '/api/dashboard-forms/' + formEditingId : API + '/api/dashboard-forms';
-  const method = formEditingId ? 'PUT' : 'POST';
-  const r = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-  const data = await r.json();
-  if (!r.ok) return toast('表單設定儲存失敗：' + (data.error || '未知錯誤'), 'error');
-  closeModal('form-config-modal');
-  toast(formEditingId ? '表單設定已更新' : '表單設定已新增', 'success');
-  await Promise.all([loadFormsManagement(), loadDashboardPage()]);
-}
-
-async function deleteDashboardForm(id, name) {
-  if (!confirm(`確定要刪除表單「${name}」？`)) return;
-  const r = await fetch(API + '/api/dashboard-forms/' + id, { method: 'DELETE' });
-  if (!r.ok) return toast('刪除表單失敗', 'error');
-  toast('表單設定已刪除', 'success');
-  await Promise.all([loadFormsManagement(), loadDashboardPage()]);
-}
-
-async function moveDashboardForm(id, delta) {
-  const index = dashboardForms.findIndex(f => f.id === id);
-  const target = index + delta;
-  if (index < 0 || target < 0 || target >= dashboardForms.length) return;
-  const reordered = [...dashboardForms];
-  const [item] = reordered.splice(index, 1);
-  reordered.splice(target, 0, item);
-  const ids = reordered.map(f => f.id);
-  const r = await fetch(API + '/api/dashboard-forms/reorder', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ ids })
-  });
-  if (!r.ok) return toast('更新順序失敗', 'error');
-  await Promise.all([loadFormsManagement(), loadDashboardPage()]);
-}
-
-function closeModal(id) { document.getElementById(id).classList.remove('open'); }
-
-function statusBadge(s) {
-  const map = { active:'badge-active', closed:'badge-closed', pending:'badge-pending', expired:'badge-expired' };
-  const label = { active:'使用中', closed:'已關閉', pending:'待確認', expired:'已過期' };
-  return `<span class="badge ${map[s]||'badge-default'}">${label[s]||s}</span>`;
-}
-
-function accountTypeBadge(t) {
-  if (t === '預設') return `<span class="badge badge-default">預設</span>`;
-  if (t === '關閉帳號') return `<span class="badge badge-closed">關閉</span>`;
-  return `<span class="badge" style="background:#f0fdf4;color:#166534;">${esc(t)}</span>`;
-}
-
-function formatDate(d) {
-  if (!d) return '—';
-  return new Date(d).toLocaleDateString('zh-TW');
-}
-
-function formatDateTime(d) {
-  if (!d) return '—';
-  return new Date(d).toLocaleString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
-}
-
-function countByStatus(list, status) { return list.filter(a => a.status === status).length; }
-function getLastUpdatedRecord(list) { return list.length ? [...list].sort((a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0))[0] : null; }
-function esc(s) { return s == null ? '' : String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function escAttr(s) { return esc(s).replace(/'/g, '&#39;'); }
-
-document.querySelectorAll('.modal-overlay').forEach(el => {
-  el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); });
-});
-document.getElementById('confirm-overlay').addEventListener('click', e => {
-  if (e.target === e.currentTarget) closeConfirm();
-});
-
-async function checkLogin() {
-  const r = await fetch(API + '/api/me');
-  if (!r.ok) {
-    document.getElementById('login-overlay').classList.add('open');
-    return;
-  }
-  const data = await r.json();
-  const name = data.name || data.email.split('@')[0];
-  const profileHtml = `<strong>👤 ${esc(name)}</strong>`;
-  ['user-profile-dash', 'user-profile-acc', 'user-profile-forms'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.innerHTML = profileHtml;
-  });
-  await loadDashboardPage();
-}
-
-async function logout() {
-  await fetch(API + '/api/logout', { method: 'POST' });
-  location.reload();
-}
-
-checkLogin();
-</script>
+<div id="feature-export-docx-root"></div>
+<div id="feature-account-modal-root"></div>
+<div id="feature-notify-modal-root"></div>
+<div id="feature-form-config-modal-root"></div>
+<div id="feature-platform-request-modal-root"></div>
+<div id="feature-platform-request-export-root"></div>
+<script src="/js/common.js"></script>
+<script src="/js/dashboard.js"></script>
+<script src="/js/accounts.js"></script>
+<script src="/js/platform-requests.js"></script>
+<script src="/js/forms.js"></script>
+<script src="/js/account-modals.js"></script>
+<script src="/js/export-docx.js"></script>
 </body>
 </html>

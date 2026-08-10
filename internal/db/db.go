@@ -92,6 +92,45 @@ func (d *DB) migrate() error {
 		created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
+
+	CREATE TABLE IF NOT EXISTS system_platform_requests (
+		id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+		request_date           TEXT    NOT NULL DEFAULT '',
+		applicant_name         TEXT    NOT NULL DEFAULT '',
+		applicant_department   TEXT    NOT NULL DEFAULT '',
+		applicant_title        TEXT    NOT NULL DEFAULT '',
+		office_phone           TEXT    NOT NULL DEFAULT '',
+		email                  TEXT    NOT NULL DEFAULT '',
+		pi_name                TEXT    NOT NULL DEFAULT '',
+		system_name            TEXT    NOT NULL DEFAULT '',
+		system_alias           TEXT    NOT NULL DEFAULT '',
+		system_purpose         TEXT    NOT NULL DEFAULT '',
+		estimated_users        TEXT    NOT NULL DEFAULT '',
+		internal_only          TEXT    NOT NULL DEFAULT '是',
+		ip_restriction         TEXT    NOT NULL DEFAULT '',
+		request_start_date     TEXT    NOT NULL DEFAULT '',
+		request_end_date       TEXT    NOT NULL DEFAULT '',
+		request_type           TEXT    NOT NULL DEFAULT '上架新增',
+		shutdown_retain_months TEXT    NOT NULL DEFAULT '',
+		shutdown_reason        TEXT    NOT NULL DEFAULT '',
+		environment_type       TEXT    NOT NULL DEFAULT '正式環境',
+		operating_system       TEXT    NOT NULL DEFAULT 'Rocky 9',
+		operating_system_other TEXT    NOT NULL DEFAULT '',
+		disk_size              TEXT    NOT NULL DEFAULT '',
+		special_requirements   TEXT    NOT NULL DEFAULT '',
+		domain_settings        TEXT    NOT NULL DEFAULT '',
+		other_requirements     TEXT    NOT NULL DEFAULT '',
+		backup_required        TEXT    NOT NULL DEFAULT '是',
+		backup_requirements    TEXT    NOT NULL DEFAULT '',
+		backup_reason          TEXT    NOT NULL DEFAULT '',
+		applicant_signature    TEXT    NOT NULL DEFAULT '',
+		supervisor_signature   TEXT    NOT NULL DEFAULT '',
+		status                 TEXT    NOT NULL DEFAULT 'active',
+		creator                TEXT    NOT NULL DEFAULT '',
+		remarks                TEXT    NOT NULL DEFAULT '',
+		created_at             DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at             DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
 	`
 	_, err := d.conn.Exec(schema)
 	_, _ = d.conn.Exec(`ALTER TABLE privileged_accounts ADD COLUMN environment TEXT NOT NULL DEFAULT '正式區'`)
@@ -292,25 +331,18 @@ func defaultFocusItems() models.DashboardFocusItems {
 }
 
 func (d *DB) seedDashboardForms() error {
-	var count int
-	if err := d.conn.QueryRow(`SELECT COUNT(*) FROM dashboard_forms`).Scan(&count); err != nil {
-		return err
-	}
-	if count > 0 {
-		return nil
-	}
 	defaultForms := []models.DashboardForm{
 		{
-			Key:              "isms-04-062",
-			Code:             "ISMS-04-062",
-			ShortCode:        "04-062",
-			Name:             "特殊權限帳號管理",
-			Description:      "管理特殊權限帳號清冊、使用狀態、盤點日期與使用者確認進度。",
-			DetailTitle:      "最近盤點清單",
-			EmptyText:        "尚無特殊權限帳號資料",
-			ProviderKey:      "privileged_accounts",
-			DisplayOrder:     1,
-			Enabled:          true,
+			Key:          "isms-04-062",
+			Code:         "ISMS-04-062",
+			ShortCode:    "04-062",
+			Name:         "特殊權限帳號管理",
+			Description:  "管理特殊權限帳號清冊、使用狀態、盤點日期與使用者確認進度。",
+			DetailTitle:  "最近盤點清單",
+			EmptyText:    "尚無特殊權限帳號資料",
+			ProviderKey:  "privileged_accounts",
+			DisplayOrder: 1,
+			Enabled:      true,
 			FocusItems: models.DashboardFocusItems{
 				ActiveTitle:  "使用中帳號",
 				ActiveMeta:   "目前仍在使用中的特殊權限帳號",
@@ -322,6 +354,27 @@ func (d *DB) seedDashboardForms() error {
 			},
 		},
 		{
+			Key:          "isms-04-078",
+			Code:         "ISMS-04-078",
+			ShortCode:    "04-078",
+			Name:         "系統平台申請",
+			Description:  "記錄主機申請、上下架、環境、OS、備份與特殊需求等資料。",
+			DetailTitle:  "最近申請資料",
+			EmptyText:    "尚無系統平台申請資料",
+			ProviderKey:  "system_platform_requests",
+			DisplayOrder: 2,
+			Enabled:      true,
+			FocusItems: models.DashboardFocusItems{
+				ActiveTitle:  "進行中申請",
+				ActiveMeta:   "目前正在處理或使用中的平台申請",
+				PendingTitle: "待追蹤申請",
+				PendingMeta:  "需補件、待審核或待確認的申請",
+				ClosedTitle:  "已完成申請",
+				ClosedMeta:   "已完成下架、關機或結案的申請",
+				RecentTitle:  "最近申請紀錄",
+			},
+		},
+		{
 			Key:                      "isms-08-001-template",
 			Code:                     "ISMS-08-001",
 			ShortCode:                "08-001",
@@ -330,7 +383,7 @@ func (d *DB) seedDashboardForms() error {
 			StatusNormalText:         "待建置",
 			StatusNeedsAttentionText: "待建置",
 			ProviderKey:              "placeholder",
-			DisplayOrder:             2,
+			DisplayOrder:             3,
 			Enabled:                  true,
 			FocusItems: models.DashboardFocusItems{
 				ActiveTitle:  "已建資料",
@@ -344,6 +397,14 @@ func (d *DB) seedDashboardForms() error {
 		},
 	}
 	for _, form := range defaultForms {
+		var existingID int
+		err := d.conn.QueryRow(`SELECT id FROM dashboard_forms WHERE form_key=?`, form.Key).Scan(&existingID)
+		if err == nil {
+			continue
+		}
+		if err != sql.ErrNoRows {
+			return err
+		}
 		if _, err := d.CreateDashboardForm(&form); err != nil {
 			return err
 		}
@@ -382,7 +443,9 @@ func unmarshalFocusItems(raw string) models.DashboardFocusItems {
 	return items
 }
 
-func scanDashboardForm(scanner interface{ Scan(dest ...interface{}) error }, f *models.DashboardForm) error {
+func scanDashboardForm(scanner interface {
+	Scan(dest ...interface{}) error
+}, f *models.DashboardForm) error {
 	var enabled int
 	var focusRaw string
 	if err := scanner.Scan(
@@ -554,4 +617,53 @@ func (d *DB) ListCustomTableTemplateRecords() ([]models.CustomTableTemplateRecor
 		list = []models.CustomTableTemplateRecord{}
 	}
 	return list, nil
+}
+
+func (d *DB) ListSystemPlatformRequests() ([]models.SystemPlatformRequest, error) {
+	rows, err := d.conn.Query(`SELECT id,request_date,applicant_name,applicant_department,applicant_title,office_phone,email,pi_name,system_name,system_alias,system_purpose,estimated_users,internal_only,ip_restriction,request_start_date,request_end_date,request_type,shutdown_retain_months,shutdown_reason,environment_type,operating_system,operating_system_other,disk_size,special_requirements,domain_settings,other_requirements,backup_required,backup_requirements,backup_reason,applicant_signature,supervisor_signature,status,creator,remarks,created_at,updated_at FROM system_platform_requests ORDER BY id DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []models.SystemPlatformRequest
+	for rows.Next() {
+		var r models.SystemPlatformRequest
+		if err := rows.Scan(&r.ID, &r.RequestDate, &r.ApplicantName, &r.ApplicantDepartment, &r.ApplicantTitle, &r.OfficePhone, &r.Email, &r.PIName, &r.SystemName, &r.SystemAlias, &r.SystemPurpose, &r.EstimatedUsers, &r.InternalOnly, &r.IPRestriction, &r.RequestStartDate, &r.RequestEndDate, &r.RequestType, &r.ShutdownRetainMonths, &r.ShutdownReason, &r.EnvironmentType, &r.OperatingSystem, &r.OperatingSystemOther, &r.DiskSize, &r.SpecialRequirements, &r.DomainSettings, &r.OtherRequirements, &r.BackupRequired, &r.BackupRequirements, &r.BackupReason, &r.ApplicantSignature, &r.SupervisorSignature, &r.Status, &r.Creator, &r.Remarks, &r.CreatedAt, &r.UpdatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, r)
+	}
+	if list == nil {
+		list = []models.SystemPlatformRequest{}
+	}
+	return list, nil
+}
+
+func (d *DB) GetSystemPlatformRequest(id int) (*models.SystemPlatformRequest, error) {
+	row := d.conn.QueryRow(`SELECT id,request_date,applicant_name,applicant_department,applicant_title,office_phone,email,pi_name,system_name,system_alias,system_purpose,estimated_users,internal_only,ip_restriction,request_start_date,request_end_date,request_type,shutdown_retain_months,shutdown_reason,environment_type,operating_system,operating_system_other,disk_size,special_requirements,domain_settings,other_requirements,backup_required,backup_requirements,backup_reason,applicant_signature,supervisor_signature,status,creator,remarks,created_at,updated_at FROM system_platform_requests WHERE id=?`, id)
+	var r models.SystemPlatformRequest
+	if err := row.Scan(&r.ID, &r.RequestDate, &r.ApplicantName, &r.ApplicantDepartment, &r.ApplicantTitle, &r.OfficePhone, &r.Email, &r.PIName, &r.SystemName, &r.SystemAlias, &r.SystemPurpose, &r.EstimatedUsers, &r.InternalOnly, &r.IPRestriction, &r.RequestStartDate, &r.RequestEndDate, &r.RequestType, &r.ShutdownRetainMonths, &r.ShutdownReason, &r.EnvironmentType, &r.OperatingSystem, &r.OperatingSystemOther, &r.DiskSize, &r.SpecialRequirements, &r.DomainSettings, &r.OtherRequirements, &r.BackupRequired, &r.BackupRequirements, &r.BackupReason, &r.ApplicantSignature, &r.SupervisorSignature, &r.Status, &r.Creator, &r.Remarks, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+func (d *DB) CreateSystemPlatformRequest(r *models.SystemPlatformRequest) (int64, error) {
+	res, err := d.conn.Exec(`INSERT INTO system_platform_requests (request_date,applicant_name,applicant_department,applicant_title,office_phone,email,pi_name,system_name,system_alias,system_purpose,estimated_users,internal_only,ip_restriction,request_start_date,request_end_date,request_type,shutdown_retain_months,shutdown_reason,environment_type,operating_system,operating_system_other,disk_size,special_requirements,domain_settings,other_requirements,backup_required,backup_requirements,backup_reason,applicant_signature,supervisor_signature,status,creator,remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		r.RequestDate, r.ApplicantName, r.ApplicantDepartment, r.ApplicantTitle, r.OfficePhone, r.Email, r.PIName, r.SystemName, r.SystemAlias, r.SystemPurpose, r.EstimatedUsers, r.InternalOnly, r.IPRestriction, r.RequestStartDate, r.RequestEndDate, r.RequestType, r.ShutdownRetainMonths, r.ShutdownReason, r.EnvironmentType, r.OperatingSystem, r.OperatingSystemOther, r.DiskSize, r.SpecialRequirements, r.DomainSettings, r.OtherRequirements, r.BackupRequired, r.BackupRequirements, r.BackupReason, r.ApplicantSignature, r.SupervisorSignature, r.Status, r.Creator, r.Remarks)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func (d *DB) UpdateSystemPlatformRequest(r *models.SystemPlatformRequest) error {
+	_, err := d.conn.Exec(`UPDATE system_platform_requests SET request_date=?,applicant_name=?,applicant_department=?,applicant_title=?,office_phone=?,email=?,pi_name=?,system_name=?,system_alias=?,system_purpose=?,estimated_users=?,internal_only=?,ip_restriction=?,request_start_date=?,request_end_date=?,request_type=?,shutdown_retain_months=?,shutdown_reason=?,environment_type=?,operating_system=?,operating_system_other=?,disk_size=?,special_requirements=?,domain_settings=?,other_requirements=?,backup_required=?,backup_requirements=?,backup_reason=?,applicant_signature=?,supervisor_signature=?,status=?,creator=?,remarks=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+		r.RequestDate, r.ApplicantName, r.ApplicantDepartment, r.ApplicantTitle, r.OfficePhone, r.Email, r.PIName, r.SystemName, r.SystemAlias, r.SystemPurpose, r.EstimatedUsers, r.InternalOnly, r.IPRestriction, r.RequestStartDate, r.RequestEndDate, r.RequestType, r.ShutdownRetainMonths, r.ShutdownReason, r.EnvironmentType, r.OperatingSystem, r.OperatingSystemOther, r.DiskSize, r.SpecialRequirements, r.DomainSettings, r.OtherRequirements, r.BackupRequired, r.BackupRequirements, r.BackupReason, r.ApplicantSignature, r.SupervisorSignature, r.Status, r.Creator, r.Remarks, r.ID)
+	return err
+}
+
+func (d *DB) DeleteSystemPlatformRequest(id int) error {
+	_, err := d.conn.Exec(`DELETE FROM system_platform_requests WHERE id=?`, id)
+	return err
 }

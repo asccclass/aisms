@@ -12,8 +12,8 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"time"
 
+	SherryServer "github.com/asccclass/sherryserver"
 	"github.com/joho/godotenv"
 )
 
@@ -45,9 +45,17 @@ func main() {
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
-	docRoot := os.Getenv("DOCUMENT_ROOT")
+	docRoot := os.Getenv("DocumentRoot")
+	if docRoot == "" {
+		docRoot = os.Getenv("DOCUMENT_ROOT")
+	}
 	if docRoot == "" {
 		docRoot = "www/html"
+	}
+
+	templateRoot := os.Getenv("TemplateRoot")
+	if templateRoot == "" {
+		templateRoot = "www/template"
 	}
 	mux.Handle("/", http.FileServer(http.Dir(docRoot)))
 
@@ -56,21 +64,17 @@ func main() {
 		port = "8080"
 	}
 
-	srv := &http.Server{
-		Addr:         ":" + port,
-		Handler:      corsMiddleware(mux),
-		ReadTimeout:  20 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  120 * time.Second,
+	srv, err := SherryServer.NewServer(":"+port, docRoot, templateRoot)
+	if err != nil {
+		log.Fatalf("failed to create sherryserver: %v", err)
 	}
+	srv.Server.Handler = corsMiddleware(mux)
 
 	fmt.Printf("\n🔐 ISMS資訊資產管理系統\n")
 	fmt.Printf("   伺服器位址：http://localhost:%s\n", port)
 	fmt.Printf("   靜態檔案：%s\n\n", docRoot)
 
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("server failed: %v", err)
-	}
+	srv.Start()
 }
 
 func corsMiddleware(next http.Handler) http.Handler {

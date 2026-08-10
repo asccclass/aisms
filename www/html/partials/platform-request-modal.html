@@ -1,0 +1,43 @@
+<div class="modal-overlay" id="platform-request-modal">
+  <div class="modal" style="width: 880px; max-width: 96vw;">
+    <h3 id="platform-request-modal-title">新增系統平台申請</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>填表日期</label><input id="pr-request_date" class="form-control" placeholder="20260810"></div>
+      <div class="form-group"><label>狀態</label><select id="pr-status" class="form-control"><option value="active">進行中</option><option value="pending">待追蹤</option><option value="closed">已完成</option></select></div>
+      <div class="form-group"><label>申請人姓名</label><input id="pr-applicant_name" class="form-control"></div>
+      <div class="form-group"><label>單位</label><input id="pr-applicant_department" class="form-control"></div>
+      <div class="form-group"><label>職稱</label><input id="pr-applicant_title" class="form-control"></div>
+      <div class="form-group"><label>辦公室電話</label><input id="pr-office_phone" class="form-control"></div>
+      <div class="form-group"><label>電子郵件</label><input id="pr-email" class="form-control"></div>
+      <div class="form-group"><label>PI</label><input id="pr-pi_name" class="form-control"></div>
+      <div class="form-group"><label>應用系統名稱</label><input id="pr-system_name" class="form-control"></div>
+      <div class="form-group"><label>英文簡稱</label><input id="pr-system_alias" class="form-control"></div>
+      <div class="form-group full"><label>系統用途說明</label><textarea id="pr-system_purpose" class="form-control" rows="3"></textarea></div>
+      <div class="form-group"><label>預估使用人數</label><input id="pr-estimated_users" class="form-control"></div>
+      <div class="form-group"><label>限院內使用</label><select id="pr-internal_only" class="form-control"><option value="是">是</option><option value="否">否</option></select></div>
+      <div class="form-group full"><label>IP 位址限制</label><input id="pr-ip_restriction" class="form-control"></div>
+      <div class="form-group"><label>申請起日</label><input id="pr-request_start_date" class="form-control" placeholder="2026-08-10"></div>
+      <div class="form-group"><label>申請迄日</label><input id="pr-request_end_date" class="form-control" placeholder="2027-08-09"></div>
+      <div class="form-group"><label>申請樣態</label><select id="pr-request_type" class="form-control"><option value="上架新增">上架新增</option><option value="下架移除">下架移除</option><option value="關機">關機</option><option value="關機保留">關機保留</option></select></div>
+      <div class="form-group"><label>關機保留月數</label><input id="pr-shutdown_retain_months" class="form-control"></div>
+      <div class="form-group full"><label>關機 / 保留原因</label><textarea id="pr-shutdown_reason" class="form-control" rows="2"></textarea></div>
+      <div class="form-group"><label>環境類別</label><select id="pr-environment_type" class="form-control"><option value="正式環境">正式環境</option><option value="測試環境">測試環境</option><option value="開發環境">開發環境</option></select></div>
+      <div class="form-group"><label>作業系統</label><select id="pr-operating_system" class="form-control"><option value="Rocky 9">Rocky 9</option><option value="Rocky 8">Rocky 8</option><option value="Windows 2025">Windows 2025</option><option value="Windows 2022">Windows 2022</option><option value="其他">其他</option></select></div>
+      <div class="form-group full"><label>其他作業系統 / 理由</label><input id="pr-operating_system_other" class="form-control"></div>
+      <div class="form-group"><label>硬碟容量</label><input id="pr-disk_size" class="form-control" placeholder="100GB"></div>
+      <div class="form-group"><label>網域名稱設定</label><input id="pr-domain_settings" class="form-control"></div>
+      <div class="form-group full"><label>特殊需求</label><textarea id="pr-special_requirements" class="form-control" rows="2"></textarea></div>
+      <div class="form-group full"><label>其他需求</label><textarea id="pr-other_requirements" class="form-control" rows="2"></textarea></div>
+      <div class="form-group"><label>備份需求</label><select id="pr-backup_required" class="form-control"><option value="是">是</option><option value="否">否</option></select></div>
+      <div class="form-group"><label>特殊備份需求</label><input id="pr-backup_requirements" class="form-control"></div>
+      <div class="form-group full"><label>不需備份理由</label><textarea id="pr-backup_reason" class="form-control" rows="2"></textarea></div>
+      <div class="form-group"><label>申請人簽章</label><input id="pr-applicant_signature" class="form-control"></div>
+      <div class="form-group"><label>主管簽章</label><input id="pr-supervisor_signature" class="form-control"></div>
+      <div class="form-group full"><label>備註</label><textarea id="pr-remarks" class="form-control" rows="3"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('platform-request-modal')">取消</button>
+      <button class="btn btn-primary" onclick="savePlatformRequest()">儲存</button>
+    </div>
+  </div>
+</div>
