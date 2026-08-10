@@ -63,3 +63,82 @@ type NotificationLog struct {
 	Status      string    `json:"status"` // "sent", "failed"
 	Message     string    `json:"message"`
 }
+
+// DashboardFocusItems 儀表板重點提醒文案
+type DashboardFocusItems struct {
+	ActiveTitle  string `json:"active_title"`
+	ActiveMeta   string `json:"active_meta"`
+	PendingTitle string `json:"pending_title"`
+	PendingMeta  string `json:"pending_meta"`
+	ClosedTitle  string `json:"closed_title"`
+	ClosedMeta   string `json:"closed_meta"`
+	RecentTitle  string `json:"recent_title"`
+}
+
+// DashboardForm ISMS 表單註冊設定
+type DashboardForm struct {
+	ID                       int                 `json:"id"`
+	Key                      string              `json:"key"`
+	Code                     string              `json:"code"`
+	ShortCode                string              `json:"short_code"`
+	Name                     string              `json:"name"`
+	Description              string              `json:"description"`
+	DetailTitle              string              `json:"detail_title"`
+	EmptyText                string              `json:"empty_text"`
+	StatusNormalText         string              `json:"status_normal_text"`
+	StatusNeedsAttentionText string              `json:"status_needs_attention_text"`
+	ProviderKey              string              `json:"provider_key"`
+	DisplayOrder             int                 `json:"display_order"`
+	Enabled                  bool                `json:"enabled"`
+	FocusItems               DashboardFocusItems `json:"focus_items"`
+	CreatedAt                time.Time           `json:"created_at"`
+	UpdatedAt                time.Time           `json:"updated_at"`
+}
+
+// DashboardFormProvider 表單資料來源選項
+type DashboardFormProvider struct {
+	Key         string `json:"key"`
+	Label       string `json:"label"`
+	Description string `json:"description"`
+}
+
+// DashboardRecord 首頁儀表板通用資料格式
+//
+// Provider 開發指南：
+// 1. 每個 provider 最終都要把自己的資料表模型轉成 DashboardRecord。
+// 2. 前端首頁只依賴這個格式，因此新增 provider 時通常不需要改首頁渲染。
+// 3. 建議對應關係如下：
+//    - PrimaryName: 卡片/清單主標題，例如帳號名稱、表單標題、資產名稱
+//    - SecondaryName: 次要分類，例如系統/環境、類別、部門
+//    - OwnerName: 負責人或使用者
+//    - Status: active / pending / closed / expired 等首頁既有狀態值
+//    - InventoryDate: 盤點日或主要業務日期，純字串即可
+//    - UpdatedAt: 用於首頁排序與最近更新顯示
+type DashboardRecord struct {
+	ID            int       `json:"id"`
+	PrimaryName   string    `json:"primary_name"`
+	SecondaryName string    `json:"secondary_name"`
+	OwnerName     string    `json:"owner_name"`
+	Status        string    `json:"status"`
+	InventoryDate string    `json:"inventory_date"`
+	UpdatedAt     time.Time `json:"updated_at"`
+	Email         string    `json:"email"`
+}
+
+// CustomTableTemplateRecord 自訂資料表 provider 範本資料模型
+//
+// 這是一個「照抄即可改」的 provider 範本模型：
+// - 若要接第二張真表，可複製這個 struct 並改名
+// - 接著在 db 層新增 ListXxxRecords()
+// - 最後在 handlers.go 的 loadDashboardRecords() switch 裡補一個 case
+type CustomTableTemplateRecord struct {
+	ID            int       `json:"id"`
+	Title         string    `json:"title"`
+	Category      string    `json:"category"`
+	OwnerName     string    `json:"owner_name"`
+	Status        string    `json:"status"`
+	InventoryDate string    `json:"inventory_date"`
+	Email         string    `json:"email"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}

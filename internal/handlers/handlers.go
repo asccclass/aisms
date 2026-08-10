@@ -19,6 +19,12 @@ type Handler struct {
 	Mailer *mailer.Mailer
 }
 
+var dashboardProviders = []models.DashboardFormProvider{
+	{Key: "privileged_accounts", Label: "特殊權限帳號資料", Description: "使用 privileged_accounts 資料表作為首頁表單資料來源"},
+	{Key: "placeholder", Label: "示範骨架 / 尚未接資料", Description: "保留表單卡片與說明，首頁顯示空狀態"},
+	{Key: "custom_table_template", Label: "自訂資料表範本", Description: "作為未來接新資料表的 provider 樣板，預設先回傳空資料"},
+}
+
 func New(d *db.DB, m *mailer.Mailer) *Handler {
 	return &Handler{DB: d, Mailer: m}
 }
@@ -311,6 +317,242 @@ func (h *Handler) ListLogs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, logs)
 }
 
+// ---- Dashboard Forms ----
+
+func (h *Handler) ListDashboardForms(w http.ResponseWriter, r *http.Request) {
+	forms, err := h.DB.ListDashboardForms()
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, forms)
+}
+
+func (h *Handler) GetDashboardForm(w http.ResponseWriter, r *http.Request) {
+	id, err := idFromPath(r, "/api/dashboard-forms/")
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+		return
+	}
+	form, err := h.DB.GetDashboardForm(id)
+	if err != nil {
+		writeJSON(w, 404, map[string]string{"error": "not found"})
+		return
+	}
+	writeJSON(w, 200, form)
+}
+
+func (h *Handler) CreateDashboardForm(w http.ResponseWriter, r *http.Request) {
+	var form models.DashboardForm
+	if err := readJSON(r, &form); err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+	if strings.TrimSpace(form.Key) == "" || strings.TrimSpace(form.Code) == "" || strings.TrimSpace(form.Name) == "" {
+		writeJSON(w, 400, map[string]string{"error": "key, code, name are required"})
+		return
+	}
+	id, err := h.DB.CreateDashboardForm(&form)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	form.ID = int(id)
+	writeJSON(w, 201, form)
+}
+
+func (h *Handler) UpdateDashboardForm(w http.ResponseWriter, r *http.Request) {
+	id, err := idFromPath(r, "/api/dashboard-forms/")
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+		return
+	}
+	var form models.DashboardForm
+	if err := readJSON(r, &form); err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+	form.ID = id
+	if strings.TrimSpace(form.Key) == "" || strings.TrimSpace(form.Code) == "" || strings.TrimSpace(form.Name) == "" {
+		writeJSON(w, 400, map[string]string{"error": "key, code, name are required"})
+		return
+	}
+	if err := h.DB.UpdateDashboardForm(&form); err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, form)
+}
+
+func (h *Handler) DeleteDashboardForm(w http.ResponseWriter, r *http.Request) {
+	id, err := idFromPath(r, "/api/dashboard-forms/")
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+		return
+	}
+	if err := h.DB.DeleteDashboardForm(id); err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]string{"message": "deleted"})
+}
+
+func (h *Handler) ReorderDashboardForms(w http.ResponseWriter, r *http.Request) {
+	var payload struct {
+		IDs []int `json:"ids"`
+	}
+	if err := readJSON(r, &payload); err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+	if len(payload.IDs) == 0 {
+		writeJSON(w, 400, map[string]string{"error": "ids are required"})
+		return
+	}
+	if err := h.DB.UpdateDashboardFormOrder(payload.IDs); err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]string{"message": "reordered"})
+}
+
+func (h *Handler) ListDashboardProviders(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, dashboardProviders)
+}
+
+func (h *Handler) ListDashboardRecords(w http.ResponseWriter, r *http.Request) {
+	formKey := strings.TrimSpace(r.URL.Query().Get("form_key"))
+	if formKey == "" {
+		writeJSON(w, 400, map[string]string{"error": "form_key is required"})
+		return
+	}
+	forms, err := h.DB.ListDashboardForms()
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	var form *models.DashboardForm
+	for i := range forms {
+		if forms[i].Key == formKey {
+			form = &forms[i]
+			break
+		}
+	}
+	if form == nil {
+		writeJSON(w, 404, map[string]string{"error": "dashboard form not found"})
+		return
+	}
+	records, err := h.loadDashboardRecords(*form)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, records)
+}
+
+// loadDashboardRecords 依 form.ProviderKey 分派對應 provider。
+//
+// Provider 開發指南：
+// 1. 在 internal/models 新增 provider 專屬資料 struct。
+// 2. 在 internal/db 新增 ListXxxRecords() 查詢函式。
+// 3. 在這裡的 switch 補一個 case，呼叫 loadXxxDashboardRecords()。
+// 4. 在 loadXxxDashboardRecords() 內把 provider 專屬資料映射成 []models.DashboardRecord。
+// 5. 在 dashboardProviders 清單加入新 provider，前端表單管理頁就能選到。
+//
+// 範例：
+//   case "asset_inventory":
+//     return h.loadAssetInventoryDashboardRecords()
+func (h *Handler) loadDashboardRecords(form models.DashboardForm) ([]models.DashboardRecord, error) {
+	switch form.ProviderKey {
+	case "privileged_accounts":
+		return h.loadPrivilegedAccountDashboardRecords()
+	case "placeholder":
+		return h.loadPlaceholderDashboardRecords()
+	case "custom_table_template":
+		return h.loadCustomTableTemplateDashboardRecords()
+	// case "asset_inventory":
+	// 	return h.loadAssetInventoryDashboardRecords()
+	default:
+		return []models.DashboardRecord{}, nil
+	}
+}
+
+func (h *Handler) loadPrivilegedAccountDashboardRecords() ([]models.DashboardRecord, error) {
+	accounts, err := h.DB.ListAccounts("all")
+	if err != nil {
+		return nil, err
+	}
+	records := make([]models.DashboardRecord, 0, len(accounts))
+	for _, a := range accounts {
+		records = append(records, models.DashboardRecord{
+			ID:            a.ID,
+			PrimaryName:   a.AccountName,
+			SecondaryName: fmt.Sprintf("%s / %s", a.SystemName, a.Environment),
+			OwnerName:     a.OwnerName,
+			Status:        string(a.Status),
+			InventoryDate: a.InventoryDate,
+			UpdatedAt:     a.UpdatedAt,
+			Email:         a.Email,
+		})
+	}
+	return records, nil
+}
+
+func (h *Handler) loadPlaceholderDashboardRecords() ([]models.DashboardRecord, error) {
+	return []models.DashboardRecord{}, nil
+}
+
+func (h *Handler) loadCustomTableTemplateDashboardRecords() ([]models.DashboardRecord, error) {
+	rows, err := h.DB.ListCustomTableTemplateRecords()
+	if err != nil {
+		return nil, err
+	}
+	records := make([]models.DashboardRecord, 0, len(rows))
+	for _, row := range rows {
+		records = append(records, models.DashboardRecord{
+			ID:            row.ID,
+			PrimaryName:   row.Title,
+			SecondaryName: row.Category,
+			OwnerName:     row.OwnerName,
+			Status:        row.Status,
+			InventoryDate: row.InventoryDate,
+			UpdatedAt:     row.UpdatedAt,
+			Email:         row.Email,
+		})
+	}
+	return records, nil
+}
+
+// loadAssetInventoryDashboardRecords 是新增 provider 時可直接照抄的範例骨架。
+//
+// 啟用方式：
+// 1. 先在 models 新增 AssetInventoryRecord struct
+// 2. 再在 db 新增 ListAssetInventoryRecords()
+// 3. 最後打開 loadDashboardRecords() 裡的 case "asset_inventory"
+//
+// 這裡先保留註解骨架，避免現在就引入尚未存在的資料表依賴。
+//
+// func (h *Handler) loadAssetInventoryDashboardRecords() ([]models.DashboardRecord, error) {
+// 	rows, err := h.DB.ListAssetInventoryRecords()
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	records := make([]models.DashboardRecord, 0, len(rows))
+// 	for _, row := range rows {
+// 		records = append(records, models.DashboardRecord{
+// 			ID:            row.ID,
+// 			PrimaryName:   row.AssetName,
+// 			SecondaryName: fmt.Sprintf("%s / %s", row.AssetType, row.Department),
+// 			OwnerName:     row.OwnerName,
+// 			Status:        row.Status,
+// 			InventoryDate: row.InventoryDate,
+// 			UpdatedAt:     row.UpdatedAt,
+// 			Email:         row.Email,
+// 		})
+// 	}
+// 	return records, nil
+// }
+
 // RegisterRoutes 掛載所有路由到 mux
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// SPA & confirm page
@@ -326,6 +568,37 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/stats", AuthMiddleware(h.Stats))
 	mux.HandleFunc("/api/notification-logs", AuthMiddleware(h.ListLogs))
 	mux.HandleFunc("/api/notify-all", AuthMiddleware(h.NotifyAll))
+	mux.HandleFunc("/api/dashboard-providers", AuthMiddleware(h.ListDashboardProviders))
+	mux.HandleFunc("/api/dashboard-records", AuthMiddleware(h.ListDashboardRecords))
+	mux.HandleFunc("/api/dashboard-forms/reorder", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			h.ReorderDashboardForms(w, r)
+			return
+		}
+		http.Error(w, "method not allowed", 405)
+	}))
+	mux.HandleFunc("/api/dashboard-forms", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			h.ListDashboardForms(w, r)
+		case http.MethodPost:
+			h.CreateDashboardForm(w, r)
+		default:
+			http.Error(w, "method not allowed", 405)
+		}
+	}))
+	mux.HandleFunc("/api/dashboard-forms/", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			h.GetDashboardForm(w, r)
+		case http.MethodPut:
+			h.UpdateDashboardForm(w, r)
+		case http.MethodDelete:
+			h.DeleteDashboardForm(w, r)
+		default:
+			http.Error(w, "method not allowed", 405)
+		}
+	}))
 
 	mux.HandleFunc("/api/accounts", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
