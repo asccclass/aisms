@@ -41,6 +41,27 @@ window.debounceSearch = function debounceSearch() {
   searchTimer = setTimeout(loadAccounts, 350);
 };
 
+window.getAccountFormSnapshot = function getAccountFormSnapshot() {
+  const snapshot = {};
+  ['system_name','environment','ip_address','inventory_date','account_name','account_type','department','department_code','owner_name','email','passphrase_rotate','status','remarks'].forEach(f => {
+    snapshot[f] = document.getElementById('f-' + f)?.value || '';
+  });
+  return snapshot;
+};
+
+window.applyCurrentUserToAccountForm = function applyCurrentUserToAccountForm() {
+  const profile = window.getCurrentUserProfile ? window.getCurrentUserProfile() : {};
+  const setIfEmpty = (id, value) => {
+    const el = document.getElementById(id);
+    if (!el || el.value.trim() || !value) return;
+    el.value = value;
+  };
+
+  setIfEmpty('f-owner_name', profile.name || '');
+  setIfEmpty('f-department', profile.department || '');
+  setIfEmpty('f-email', profile.email || '');
+};
+
 window.openCreate = async function openCreate() {
   const loaded = await ensureAccountModalLoaded();
   if (!loaded) return;
@@ -48,6 +69,9 @@ window.openCreate = async function openCreate() {
   document.getElementById('modal-title').textContent = '新增特殊權限帳號';
   clearForm();
   document.getElementById('f-inventory_date').value = new Date().toISOString().slice(0,10).replace(/-/g,'');
+  applyCurrentUserToAccountForm();
+  setModalSnapshotSource('account-modal', getAccountFormSnapshot);
+  captureModalBaseline('account-modal');
   document.getElementById('account-modal').classList.add('open');
 };
 
@@ -58,6 +82,8 @@ window.openEdit = async function openEdit(id) {
   document.getElementById('modal-title').textContent = '編輯帳號 #' + id;
   const r = await fetch(API + '/api/accounts/' + id);
   fillForm(await r.json());
+  setModalSnapshotSource('account-modal', getAccountFormSnapshot);
+  captureModalBaseline('account-modal');
   document.getElementById('account-modal').classList.add('open');
 };
 
@@ -91,6 +117,7 @@ window.saveAccount = async function saveAccount() {
     return toast('錯誤：' + (err.error || '操作失敗'), 'error');
   }
   toast(editingId ? '帳號已更新 ✅' : '帳號已新增 ✅', 'success');
+  captureModalBaseline('account-modal');
   closeModal('account-modal');
   await Promise.all([loadAccounts(), loadDashboardPage()]);
 };
@@ -114,23 +141,34 @@ window.doNotify = async function doNotify() {
 };
 
 window.notifyAll = async function notifyAll() {
-  if (!confirm('將對所有「使用中」且有 Email 的帳號發送確認通知，確定繼續？')) return;
   const btn = event.currentTarget;
-  btn.disabled = true;
-  btn.textContent = '發送中…';
-  const r = await fetch(API + '/api/notify-all', { method: 'POST' });
-  const j = await r.json();
-  btn.disabled = false;
-  btn.innerHTML = '📧 批次通知所有使用中帳號';
-  toast(`發送完成：成功 ${j.sent} 封，失敗 ${j.failed} 封`, j.failed ? 'error' : 'success');
-  loadDashboardPage();
+  showConfirmDialog({
+    title: '📧 批次通知確認',
+    message: '將對所有「使用中」且有 Email 的帳號發送確認通知，確定繼續？',
+    confirmLabel: '確認發送',
+    confirmClass: 'btn btn-warning',
+    onConfirm: async () => {
+      btn.disabled = true;
+      btn.textContent = '發送中…';
+      const r = await fetch(API + '/api/notify-all', { method: 'POST' });
+      const j = await r.json();
+      btn.disabled = false;
+      btn.innerHTML = '📧 批次通知所有使用中帳號';
+      toast(`發送完成：成功 ${j.sent} 封，失敗 ${j.failed} 封`, j.failed ? 'error' : 'success');
+      loadDashboardPage();
+    }
+  });
 };
 
 window.confirmDelete = function confirmDelete(id, name) {
   deleteId = id;
-  document.getElementById('confirm-msg').textContent = `確定要刪除帳號「${name}」(#${id})？此操作無法復原。`;
-  document.getElementById('confirm-ok').onclick = doDelete;
-  document.getElementById('confirm-overlay').classList.add('open');
+  showConfirmDialog({
+    title: '⚠️ 確認刪除',
+    message: `確定要刪除帳號「${name}」(#${id})？此操作無法復原。`,
+    confirmLabel: '確定刪除',
+    confirmClass: 'btn btn-danger',
+    onConfirm: doDelete
+  });
 };
 
 window.doDelete = async function doDelete() {
@@ -139,10 +177,6 @@ window.doDelete = async function doDelete() {
   if (!r.ok) return toast('刪除失敗', 'error');
   toast('帳號已刪除', 'success');
   await Promise.all([loadAccounts(), loadDashboardPage()]);
-};
-
-window.closeConfirm = function closeConfirm() {
-  document.getElementById('confirm-overlay').classList.remove('open');
 };
 
 window.loadLogs = async function loadLogs() {

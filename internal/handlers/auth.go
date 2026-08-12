@@ -2,9 +2,12 @@ package handlers
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"isms-privilege/internal/workspaceprofile"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -24,6 +27,18 @@ type googleUserInfo struct {
 	ID            string `json:"id"`
 	Email         string `json:"email"`
 	VerifiedEmail bool   `json:"verified_email"`
+	Name          string `json:"name"`
+	GivenName     string `json:"given_name"`
+	FamilyName    string `json:"family_name"`
+	Picture       string `json:"picture"`
+	Locale        string `json:"locale"`
+	HD            string `json:"hd"`
+}
+
+type googleOIDCUserInfo struct {
+	Sub           string `json:"sub"`
+	Email         string `json:"email"`
+	EmailVerified bool   `json:"email_verified"`
 	Name          string `json:"name"`
 	GivenName     string `json:"given_name"`
 	FamilyName    string `json:"family_name"`
@@ -53,7 +68,7 @@ func InitOAuth2() {
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
 		RedirectURL:  redirectURL,
-		Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"},
+		Scopes:       []string{"openid", "email", "profile"},
 		Endpoint:     google.Endpoint,
 	}
 }
@@ -95,6 +110,10 @@ func inferDepartment(ui googleUserInfo) string {
 		return emailDomain
 	}
 	return ""
+}
+
+func workspaceResolver() *workspaceprofile.Resolver {
+	return workspaceprofile.NewResolver(lookupDepartmentByDomain)
 }
 
 func lookupDepartmentByDomain(domain string) string {
@@ -150,7 +169,7 @@ func isAllowedHostedDomain(ui googleUserInfo) bool {
 func setSessionCookie(w http.ResponseWriter, name, value string, httpOnly bool) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     name,
-		Value:    value,
+		Value:    url.QueryEscape(value),
 		Path:     "/",
 		Expires:  time.Now().Add(24 * time.Hour),
 		HttpOnly: httpOnly,
@@ -166,6 +185,17 @@ func expireCookie(w http.ResponseWriter, name string, httpOnly bool) {
 		MaxAge:   -1,
 		HttpOnly: httpOnly,
 	})
+}
+
+func decodeCookieValue(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	decoded, err := url.QueryUnescape(raw)
+	if err != nil {
+		return raw
+	}
+	return decoded
 }
 
 func writeGoogleSessionCookies(w http.ResponseWriter, ui googleUserInfo, profile sessionUserProfile) {
@@ -186,7 +216,79 @@ func writeGoogleSessionCookies(w http.ResponseWriter, ui googleUserInfo, profile
 	setSessionCookie(w, "admin_org_unit_path", profile.OrgUnitPath, false)
 }
 
-func buildSessionUserProfile(ui googleUserInfo, resolved workspaceProfile) sessionUserProfile {
+func mergeGoogleUserInfo(dst *googleUserInfo, src googleOIDCUserInfo) {
+	if dst == nil {
+		return
+	}
+	if strings.TrimSpace(dst.ID) == "" {
+		dst.ID = strings.TrimSpace(src.Sub)
+	}
+	if strings.TrimSpace(dst.Email) == "" {
+		dst.Email = strings.TrimSpace(src.Email)
+	}
+	if !dst.VerifiedEmail {
+		dst.VerifiedEmail = src.EmailVerified
+	}
+	if strings.TrimSpace(dst.Name) == "" {
+		dst.Name = strings.TrimSpace(src.Name)
+	}
+	if strings.TrimSpace(dst.GivenName) == "" {
+		dst.GivenName = strings.TrimSpace(src.GivenName)
+	}
+	if strings.TrimSpace(dst.FamilyName) == "" {
+		dst.FamilyName = strings.TrimSpace(src.FamilyName)
+	}
+	if strings.TrimSpace(dst.Picture) == "" {
+		dst.Picture = strings.TrimSpace(src.Picture)
+	}
+	if strings.TrimSpace(dst.Locale) == "" {
+		dst.Locale = strings.TrimSpace(src.Locale)
+	}
+	if strings.TrimSpace(dst.HD) == "" {
+		dst.HD = strings.TrimSpace(src.HD)
+	}
+}
+
+func decodeIDTokenClaims(raw string) (googleOIDCUserInfo, error) {
+	parts := strings.Split(raw, ".")
+	if len(parts) < 2 {
+		return googleOIDCUserInfo{}, fmt.Errorf("invalid id token")
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return googleOIDCUserInfo{}, err
+	}
+	var claims googleOIDCUserInfo
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return googleOIDCUserInfo{}, err
+	}
+	return claims, nil
+}
+
+func fetchGoogleUserInfo(client *http.Client, token *oauth2.Token) (googleUserInfo, error) {
+	var ui googleUserInfo
+
+	if rawIDToken, ok := token.Extra("id_token").(string); ok && strings.TrimSpace(rawIDToken) != "" {
+		if claims, err := decodeIDTokenClaims(rawIDToken); err == nil {
+			mergeGoogleUserInfo(&ui, claims)
+		}
+	}
+
+	resp, err := client.Get("https://openidconnect.googleapis.com/v1/userinfo")
+	if err == nil && resp != nil {
+		defer resp.Body.Close()
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			var oidcUI googleOIDCUserInfo
+			if err := json.NewDecoder(resp.Body).Decode(&oidcUI); err == nil {
+				mergeGoogleUserInfo(&ui, oidcUI)
+			}
+		}
+	}
+
+	return ui, nil
+}
+
+func buildSessionUserProfile(ui googleUserInfo, resolved workspaceprofile.Profile) sessionUserProfile {
 	department := firstNonEmpty(resolved.Department, inferDepartment(ui))
 	source := firstNonEmpty(resolved.Source, "hd")
 	note := "Google basic userinfo 不會直接提供單位；系統會依序嘗試 Directory API、People API，最後才 fallback 到 hosted domain / email domain。"
@@ -217,14 +319,14 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	if mockEmail != "" && isDevMockLoginEnabled() {
 		http.SetCookie(w, &http.Cookie{
 			Name:     "admin_email",
-			Value:    mockEmail,
+			Value:    url.QueryEscape(mockEmail),
 			Path:     "/",
 			Expires:  time.Now().Add(24 * time.Hour),
 			HttpOnly: true,
 		})
 		http.SetCookie(w, &http.Cookie{
 			Name:     "admin_name",
-			Value:    "測試人員",
+			Value:    url.QueryEscape("測試人員"),
 			Path:     "/",
 			Expires:  time.Now().Add(24 * time.Hour),
 			HttpOnly: false, // allow JS to read
@@ -238,7 +340,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 			HD:            emailDomain(mockEmail),
 			VerifiedEmail: true,
 		}
-		writeGoogleSessionCookies(w, mockUI, buildSessionUserProfile(mockUI, workspaceProfile{
+		writeGoogleSessionCookies(w, mockUI, buildSessionUserProfile(mockUI, workspaceprofile.Profile{
 			Department: inferDepartment(mockUI),
 			Source:     "hd",
 		}))
@@ -277,16 +379,9 @@ func (h *Handler) OAuth2Callback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	client := oauth2Config.Client(context.Background(), token)
-	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
-	if err != nil || resp.StatusCode != 200 {
+	ui, err := fetchGoogleUserInfo(client, token)
+	if err != nil {
 		http.Redirect(w, r, "/?error=userinfo_failed", http.StatusTemporaryRedirect)
-		return
-	}
-	defer resp.Body.Close()
-
-	var ui googleUserInfo
-	if err := json.NewDecoder(resp.Body).Decode(&ui); err != nil {
-		http.Redirect(w, r, "/?error=userinfo_decode_failed", http.StatusTemporaryRedirect)
 		return
 	}
 
@@ -303,7 +398,10 @@ func (h *Handler) OAuth2Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resolvedProfile := resolveWorkspaceProfile(context.Background(), ui)
+	resolvedProfile := workspaceResolver().Resolve(context.Background(), workspaceprofile.UserIdentity{
+		Email: ui.Email,
+		HD:    ui.HD,
+	})
 	writeGoogleSessionCookies(w, ui, buildSessionUserProfile(ui, resolvedProfile))
 
 	http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
@@ -342,7 +440,56 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		if err != nil || c == nil {
 			return ""
 		}
-		return c.Value
+		return decodeCookieValue(c.Value)
+	}
+
+	profile := sessionUserProfile{
+		Department:       cookieValue("admin_department"),
+		DepartmentSource: cookieValue("admin_department_source"),
+		DepartmentNote:   cookieValue("admin_department_note"),
+		Title:            cookieValue("admin_title"),
+		OrganizationName: cookieValue("admin_organization_name"),
+		OrgUnitPath:      cookieValue("admin_org_unit_path"),
+	}
+	hostedDomain := cookieValue("admin_hd")
+	if profile.Department == "" || profile.Title == "" || profile.OrganizationName == "" || profile.OrgUnitPath == "" || profile.DepartmentSource == "" || profile.DepartmentSource == "hd" {
+		resolvedProfile := workspaceResolver().Resolve(context.Background(), workspaceprofile.UserIdentity{
+			Email: emailCookie.Value,
+			HD:    hostedDomain,
+		})
+		enriched := buildSessionUserProfile(googleUserInfo{
+			Email: emailCookie.Value,
+			HD:    hostedDomain,
+		}, resolvedProfile)
+
+		// Prefer fresh Workspace-derived data over older hosted-domain fallback.
+		if enriched.DepartmentSource != "" && enriched.DepartmentSource != "hd" {
+			if enriched.Department != "" {
+				profile.Department = enriched.Department
+			}
+			profile.DepartmentSource = enriched.DepartmentSource
+			profile.DepartmentNote = enriched.DepartmentNote
+		} else {
+			profile.Department = firstNonEmpty(profile.Department, enriched.Department)
+			profile.DepartmentSource = firstNonEmpty(profile.DepartmentSource, enriched.DepartmentSource)
+			profile.DepartmentNote = firstNonEmpty(profile.DepartmentNote, enriched.DepartmentNote)
+		}
+		profile.Title = firstNonEmpty(enriched.Title, profile.Title)
+		profile.OrganizationName = firstNonEmpty(enriched.OrganizationName, profile.OrganizationName)
+		profile.OrgUnitPath = firstNonEmpty(enriched.OrgUnitPath, profile.OrgUnitPath)
+		if profile.Department == "" && profile.OrgUnitPath != "" {
+			profile.Department = strings.Trim(profile.OrgUnitPath, "/")
+		}
+	}
+	if profile.OrgUnitPath != "" {
+		ouDepartment := strings.Trim(profile.OrgUnitPath, "/")
+		if ouDepartment != "" {
+			profile.Department = ouDepartment
+			if profile.DepartmentSource == "" || profile.DepartmentSource == "hd" {
+				profile.DepartmentSource = "directory"
+				profile.DepartmentNote = "單位資訊目前使用 Google Workspace Directory API 的 orgUnitPath。"
+			}
+		}
 	}
 
 	writeJSON(w, 200, map[string]interface{}{
@@ -351,17 +498,17 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		"given_name":        cookieValue("admin_given_name"),
 		"family_name":       cookieValue("admin_family_name"),
 		"picture":           cookieValue("admin_picture"),
-		"hosted_domain":     cookieValue("admin_hd"),
+		"hosted_domain":     hostedDomain,
 		"google_id":         cookieValue("admin_google_id"),
 		"locale":            cookieValue("admin_locale"),
 		"verified_email":    cookieValue("admin_verified_email") == "true",
 		"email_domain":      emailDomain(emailCookie.Value),
-		"department":        cookieValue("admin_department"),
-		"department_source": cookieValue("admin_department_source"),
-		"department_note":   cookieValue("admin_department_note"),
-		"title":             cookieValue("admin_title"),
-		"organization_name": cookieValue("admin_organization_name"),
-		"org_unit_path":     cookieValue("admin_org_unit_path"),
+		"department":        profile.Department,
+		"department_source": profile.DepartmentSource,
+		"department_note":   profile.DepartmentNote,
+		"title":             profile.Title,
+		"organization_name": profile.OrganizationName,
+		"org_unit_path":     profile.OrgUnitPath,
 	})
 }
 

@@ -1,4 +1,4 @@
-package handlers
+package workspaceprofile
 
 import (
 	"context"
@@ -12,12 +12,21 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-type workspaceProfile struct {
+type UserIdentity struct {
+	Email string
+	HD    string
+}
+
+type Profile struct {
 	Department       string
 	Title            string
 	OrganizationName string
 	OrgUnitPath      string
 	Source           string
+}
+
+type Resolver struct {
+	DomainDepartmentLookup func(string) string
 }
 
 type directoryUser struct {
@@ -43,46 +52,71 @@ type peoplePerson struct {
 	} `json:"organizations"`
 }
 
-func resolveWorkspaceProfile(ctx context.Context, ui googleUserInfo) workspaceProfile {
-	if profile, err := resolveDirectoryProfile(ctx, ui.Email); err == nil && profile.hasUsefulData() {
+func NewResolver(domainDepartmentLookup func(string) string) *Resolver {
+	return &Resolver{DomainDepartmentLookup: domainDepartmentLookup}
+}
+
+func (r *Resolver) Resolve(ctx context.Context, identity UserIdentity) Profile {
+	if profile, err := r.resolveDirectoryProfile(ctx, identity.Email); err == nil && profile.hasUsefulData() {
 		return profile
 	}
-	if profile, err := resolvePeopleProfile(ctx, ui.Email); err == nil && profile.hasUsefulData() {
+	if profile, err := r.resolvePeopleProfile(ctx, identity.Email); err == nil && profile.hasUsefulData() {
 		profile.Source = "people"
 		return profile
 	}
-	department := inferDepartment(ui)
+	department := r.inferDepartment(identity)
 	if department == "" {
-		department = firstNonEmpty(ui.HD, emailDomain(ui.Email))
+		department = firstNonEmpty(strings.TrimSpace(identity.HD), emailDomain(identity.Email))
 	}
-	return workspaceProfile{
+	return Profile{
 		Department: department,
 		Source:     "hd",
 	}
 }
 
-func (p workspaceProfile) hasUsefulData() bool {
+func (p Profile) hasUsefulData() bool {
 	return strings.TrimSpace(p.Department) != "" ||
 		strings.TrimSpace(p.Title) != "" ||
 		strings.TrimSpace(p.OrganizationName) != "" ||
 		strings.TrimSpace(p.OrgUnitPath) != ""
 }
 
-func resolveDirectoryProfile(ctx context.Context, userEmail string) (workspaceProfile, error) {
+func (r *Resolver) inferDepartment(identity UserIdentity) string {
+	if mapped := r.lookupDepartmentByDomain(identity.HD); mapped != "" {
+		return mapped
+	}
+	emailDomain := emailDomain(identity.Email)
+	if mapped := r.lookupDepartmentByDomain(emailDomain); mapped != "" {
+		return mapped
+	}
+	if strings.TrimSpace(identity.HD) != "" {
+		return strings.TrimSpace(identity.HD)
+	}
+	return emailDomain
+}
+
+func (r *Resolver) lookupDepartmentByDomain(domain string) string {
+	if r == nil || r.DomainDepartmentLookup == nil {
+		return ""
+	}
+	return strings.TrimSpace(r.DomainDepartmentLookup(domain))
+}
+
+func (r *Resolver) resolveDirectoryProfile(ctx context.Context, userEmail string) (Profile, error) {
 	client, err := newWorkspaceClient(ctx, os.Getenv("GOOGLE_WORKSPACE_ADMIN_EMAIL"), []string{
 		"https://www.googleapis.com/auth/admin.directory.user.readonly",
 	})
 	if err != nil {
-		return workspaceProfile{}, err
+		return Profile{}, err
 	}
 
 	endpoint := "https://admin.googleapis.com/admin/directory/v1/users/" + url.PathEscape(userEmail) + "?projection=full&viewType=admin_view"
 	var du directoryUser
 	if err := doGoogleJSONRequest(ctx, client, endpoint, &du); err != nil {
-		return workspaceProfile{}, err
+		return Profile{}, err
 	}
 
-	profile := workspaceProfile{
+	profile := Profile{
 		OrgUnitPath: strings.TrimSpace(du.OrgUnitPath),
 		Source:      "directory",
 	}
@@ -110,22 +144,22 @@ func resolveDirectoryProfile(ctx context.Context, userEmail string) (workspacePr
 	return profile, nil
 }
 
-func resolvePeopleProfile(ctx context.Context, userEmail string) (workspaceProfile, error) {
+func (r *Resolver) resolvePeopleProfile(ctx context.Context, userEmail string) (Profile, error) {
 	client, err := newWorkspaceClient(ctx, userEmail, []string{
 		"https://www.googleapis.com/auth/user.organization.read",
 	})
 	if err != nil {
-		return workspaceProfile{}, err
+		return Profile{}, err
 	}
 
 	endpoint := "https://people.googleapis.com/v1/people/me?personFields=organizations"
 	var person peoplePerson
 	if err := doGoogleJSONRequest(ctx, client, endpoint, &person); err != nil {
-		return workspaceProfile{}, err
+		return Profile{}, err
 	}
 
 	dept, title, orgName := selectPeopleOrganization(person.Organizations)
-	return workspaceProfile{
+	return Profile{
 		Department:       dept,
 		Title:            title,
 		OrganizationName: orgName,
@@ -243,4 +277,21 @@ func selectPeopleOrganization(orgs []struct {
 		return strings.TrimSpace(orgs[0].Department), strings.TrimSpace(orgs[0].Title), strings.TrimSpace(orgs[0].Name)
 	}
 	return "", "", ""
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func emailDomain(email string) string {
+	parts := strings.Split(strings.TrimSpace(email), "@")
+	if len(parts) != 2 {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(parts[1]))
 }

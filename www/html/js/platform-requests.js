@@ -51,6 +51,22 @@
     return document.getElementById('user-profile-platform')?.dataset?.userName || '';
   }
 
+  function applyCurrentUserToPlatformRequestForm() {
+    const profile = window.getCurrentUserProfile ? window.getCurrentUserProfile() : {};
+    const setIfEmpty = (id, value) => {
+      const el = document.getElementById(id);
+      if (!el || el.value.trim() || !value) return;
+      el.value = value;
+    };
+    const fallbackName = profile.name || profile.email || '';
+
+    setIfEmpty('pr-applicant_name', profile.name || '');
+    setIfEmpty('pr-applicant_department', profile.department || '');
+    setIfEmpty('pr-applicant_title', profile.title || '');
+    setIfEmpty('pr-email', profile.email || '');
+    setIfEmpty('pr-applicant_signature', fallbackName);
+  }
+
   function buildExportStorageKey() {
     const user = getCurrentUserName().trim().toLowerCase();
     return `${exportStoragePrefix}:${user || 'anonymous'}`;
@@ -79,6 +95,14 @@
 
   function todayYmd() {
     return new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  }
+
+  function getPlatformRequestFormSnapshot() {
+    const snapshot = {};
+    fields.forEach(field => {
+      snapshot[field] = document.getElementById('pr-' + field)?.value || '';
+    });
+    return snapshot;
   }
 
   window.loadPlatformRequests = async function loadPlatformRequests() {
@@ -145,6 +169,9 @@
     document.getElementById('platform-request-modal-title').textContent = '新增系統平台申請';
     clearPlatformRequestForm();
     document.getElementById('pr-request_date').value = todayYmd();
+    applyCurrentUserToPlatformRequestForm();
+    setModalSnapshotSource('platform-request-modal', getPlatformRequestFormSnapshot);
+    captureModalBaseline('platform-request-modal');
     document.getElementById('platform-request-modal').classList.add('open');
   };
 
@@ -156,6 +183,8 @@
     const r = await fetch(API + '/api/platform-requests/' + id);
     const data = await r.json();
     fillPlatformRequestForm(data);
+    setModalSnapshotSource('platform-request-modal', getPlatformRequestFormSnapshot);
+    captureModalBaseline('platform-request-modal');
     document.getElementById('platform-request-modal').classList.add('open');
   };
 
@@ -197,6 +226,7 @@
     });
     const data = await r.json();
     if (!r.ok) return toast('儲存失敗：' + (data.error || '未知錯誤'), 'error');
+    captureModalBaseline('platform-request-modal');
     closeModal('platform-request-modal');
     toast(platformRequestEditingId ? '申請資料已更新' : '申請資料已新增', 'success');
     await Promise.all([loadPlatformRequests(), loadDashboardPage()]);
@@ -204,9 +234,13 @@
 
   window.confirmDeletePlatformRequest = function confirmDeletePlatformRequest(id, name) {
     platformRequestDeleteId = id;
-    document.getElementById('confirm-msg').textContent = `確定要刪除申請「${name}」(#${id})？此操作無法復原。`;
-    document.getElementById('confirm-ok').onclick = doDeletePlatformRequest;
-    document.getElementById('confirm-overlay').classList.add('open');
+    showConfirmDialog({
+      title: '⚠️ 確認刪除',
+      message: `確定要刪除申請「${name}」(#${id})？此操作無法復原。`,
+      confirmLabel: '確定刪除',
+      confirmClass: 'btn btn-danger',
+      onConfirm: doDeletePlatformRequest
+    });
   };
 
   window.doDeletePlatformRequest = async function doDeletePlatformRequest() {

@@ -1,4 +1,12 @@
 (function () {
+  function getFormConfigSnapshot() {
+    const snapshot = {};
+    ['key','code','short_code','name','description','detail_title','empty_text','status_normal_text','status_needs_attention_text','provider_key','display_order','enabled','active_title','active_meta','pending_title','pending_meta','closed_title','closed_meta','recent_title'].forEach(id => {
+      snapshot[id] = document.getElementById('ff-' + id)?.value || '';
+    });
+    return snapshot;
+  }
+
   async function ensureFormConfigModalLoaded() {
     const root = document.getElementById('feature-form-config-modal-root');
     if (!root) return false;
@@ -62,6 +70,8 @@
     document.getElementById('form-config-title').textContent = '新增表單設定';
     clearDashboardFormForm();
     document.getElementById('ff-display_order').value = dashboardForms.length + 1;
+    setModalSnapshotSource('form-config-modal', getFormConfigSnapshot);
+    captureModalBaseline('form-config-modal');
     document.getElementById('form-config-modal').classList.add('open');
   };
 
@@ -74,6 +84,8 @@
     renderProviderOptions();
     document.getElementById('form-config-title').textContent = '編輯表單設定';
     fillDashboardFormForm(form);
+    setModalSnapshotSource('form-config-modal', getFormConfigSnapshot);
+    captureModalBaseline('form-config-modal');
     document.getElementById('form-config-modal').classList.add('open');
   };
 
@@ -139,17 +151,25 @@
     const r = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
     const data = await r.json();
     if (!r.ok) return toast('表單設定儲存失敗：' + (data.error || '未知錯誤'), 'error');
+    captureModalBaseline('form-config-modal');
     closeModal('form-config-modal');
     toast(formEditingId ? '表單設定已更新' : '表單設定已新增', 'success');
     await Promise.all([loadFormsManagement(), loadDashboardPage()]);
   };
 
   window.deleteDashboardForm = async function deleteDashboardForm(id, name) {
-    if (!confirm(`確定要刪除表單「${name}」？`)) return;
-    const r = await fetch(API + '/api/dashboard-forms/' + id, { method: 'DELETE' });
-    if (!r.ok) return toast('刪除表單失敗', 'error');
-    toast('表單設定已刪除', 'success');
-    await Promise.all([loadFormsManagement(), loadDashboardPage()]);
+    showConfirmDialog({
+      title: '⚠️ 確認刪除',
+      message: `確定要刪除表單「${name}」？此操作無法復原。`,
+      confirmLabel: '確定刪除',
+      confirmClass: 'btn btn-danger',
+      onConfirm: async () => {
+        const r = await fetch(API + '/api/dashboard-forms/' + id, { method: 'DELETE' });
+        if (!r.ok) return toast('刪除表單失敗', 'error');
+        toast('表單設定已刪除', 'success');
+        await Promise.all([loadFormsManagement(), loadDashboardPage()]);
+      }
+    });
   };
 
   window.moveDashboardForm = async function moveDashboardForm(id, delta) {

@@ -21,6 +21,10 @@ window.deleteId = null;
 window.searchTimer = null;
 window.profileTargets = ['user-profile-dash', 'user-profile-acc', 'user-profile-forms', 'user-profile-platform'];
 window.profileExpanded = false;
+window.currentUserProfile = null;
+window.modalSnapshotGetters = {};
+window.modalSnapshotBaselines = {};
+window.confirmState = null;
 
 window.normalizeDashboardForm = function normalizeDashboardForm(form) {
   return {
@@ -58,8 +62,68 @@ window.toast = function toast(msg, type = '') {
 };
 
 window.closeModal = function closeModal(id) {
+  if (window.modalIsDirty && window.modalIsDirty(id)) {
+    showConfirmDialog({
+      title: '⚠️ 尚未儲存',
+      message: '表單內容尚未儲存，確定要關閉視窗？',
+      confirmLabel: '仍要關閉',
+      confirmClass: 'btn btn-danger',
+      onConfirm: () => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('open');
+      }
+    });
+    return;
+  }
   const el = document.getElementById(id);
   if (el) el.classList.remove('open');
+};
+
+window.showConfirmDialog = function showConfirmDialog(options) {
+  const overlay = document.getElementById('confirm-overlay');
+  const titleEl = document.getElementById('confirm-title');
+  const msgEl = document.getElementById('confirm-msg');
+  const okEl = document.getElementById('confirm-ok');
+  const cancelEl = document.getElementById('confirm-cancel');
+  if (!overlay || !titleEl || !msgEl || !okEl || !cancelEl) return;
+
+  window.confirmState = {
+    onConfirm: typeof options?.onConfirm === 'function' ? options.onConfirm : null,
+    onCancel: typeof options?.onCancel === 'function' ? options.onCancel : null
+  };
+
+  titleEl.textContent = options?.title || '⚠️ 請再次確認';
+  msgEl.textContent = options?.message || '確定要繼續執行這個操作嗎？';
+  cancelEl.textContent = options?.cancelLabel || '取消';
+  okEl.textContent = options?.confirmLabel || '確定';
+  okEl.className = options?.confirmClass || 'btn btn-danger';
+  overlay.classList.add('open');
+};
+
+window.setModalSnapshotSource = function setModalSnapshotSource(id, getter) {
+  if (!id || typeof getter !== 'function') return;
+  window.modalSnapshotGetters[id] = getter;
+};
+
+window.captureModalBaseline = function captureModalBaseline(id) {
+  const getter = window.modalSnapshotGetters[id];
+  if (!getter) return;
+  window.modalSnapshotBaselines[id] = JSON.stringify(getter());
+};
+
+window.modalIsDirty = function modalIsDirty(id) {
+  const getter = window.modalSnapshotGetters[id];
+  if (!getter) return false;
+  const current = JSON.stringify(getter());
+  const baseline = window.modalSnapshotBaselines[id];
+  return baseline != null && current !== baseline;
+};
+
+window.confirmOk = function confirmOk() {
+  const state = window.confirmState;
+  window.confirmState = null;
+  document.getElementById('confirm-overlay')?.classList.remove('open');
+  if (state && typeof state.onConfirm === 'function') state.onConfirm();
 };
 
 window.statusBadge = function statusBadge(s) {
@@ -109,6 +173,10 @@ window.toggleUserProfile = function toggleUserProfile() {
   });
 };
 
+window.getCurrentUserProfile = function getCurrentUserProfile() {
+  return window.currentUserProfile || {};
+};
+
 window.checkLogin = async function checkLogin() {
   const r = await fetch(API + '/api/me');
   if (!r.ok) {
@@ -116,10 +184,13 @@ window.checkLogin = async function checkLogin() {
     return;
   }
   const data = await r.json();
+  window.currentUserProfile = data;
   const name = data.name || data.email.split('@')[0];
-  const profileLines = [
+  const summaryLine = [
     data.department ? `部門：${esc(data.department)}` : '',
-    data.title ? `職稱：${esc(data.title)}` : '',
+    data.title ? `職稱：${esc(data.title)}` : ''
+  ].filter(Boolean).join(' ｜ ');
+  const profileLines = [
     data.organization_name ? `組織：${esc(data.organization_name)}` : '',
     data.org_unit_path ? `OU：${esc(data.org_unit_path)}` : '',
     data.department_source ? `來源：<code>${esc(data.department_source)}</code>` : ''
@@ -132,6 +203,7 @@ window.checkLogin = async function checkLogin() {
     <div class="user-profile-body">
       <div class="user-profile-name"><strong>${esc(name)}</strong><span class="user-profile-toggle">${profileExpanded ? '收合' : '展開'}</span></div>
       <div class="user-profile-meta">${esc(data.email || '')}</div>
+      ${summaryLine ? `<div class="user-profile-meta user-profile-summary">${summaryLine}</div>` : ''}
       ${profileLines.length ? `<div class="user-profile-meta user-profile-detail">${profileLines.join('<br>')}</div>` : ''}
     </div>`;
   profileTargets.forEach(id => {
@@ -144,6 +216,8 @@ window.checkLogin = async function checkLogin() {
       el.dataset.userDomain = data.hosted_domain || data.email_domain || '';
       el.dataset.userDepartment = data.department || '';
       el.dataset.userDepartmentSource = data.department_source || '';
+      el.dataset.userTitle = data.title || '';
+      el.dataset.userOrganizationName = data.organization_name || '';
       el.onclick = toggleUserProfile;
     }
   });
@@ -155,18 +229,13 @@ window.logout = async function logout() {
   location.reload();
 };
 
-document.addEventListener('click', e => {
-  if (e.target.classList && e.target.classList.contains('modal-overlay')) {
-    e.target.classList.remove('open');
-  }
-});
+window.closeConfirm = function closeConfirm() {
+  const state = window.confirmState;
+  window.confirmState = null;
+  document.getElementById('confirm-overlay')?.classList.remove('open');
+  if (state && typeof state.onCancel === 'function') state.onCancel();
+};
 
 document.addEventListener('DOMContentLoaded', () => {
-  const confirmOverlay = document.getElementById('confirm-overlay');
-  if (confirmOverlay) {
-    confirmOverlay.addEventListener('click', e => {
-      if (e.target === e.currentTarget) closeConfirm();
-    });
-  }
   checkLogin();
 });

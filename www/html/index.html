@@ -273,6 +273,7 @@
   .user-profile-body { display: grid; gap: 4px; min-width: 0; }
   .user-profile-name { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--text); }
   .user-profile-meta { font-size: 11px; color: var(--text-muted); line-height: 1.5; word-break: break-word; }
+  .user-profile-summary { color: var(--text); font-weight: 600; }
   .user-profile-detail { display: none; }
   .user-profile.expanded .user-profile-detail { display: block; }
   .user-profile-toggle {
@@ -502,11 +503,11 @@
 <!-- ═══ Confirm Delete ═══ -->
 <div class="confirm-overlay" id="confirm-overlay">
   <div class="confirm-box">
-    <h4>⚠️ 確認刪除</h4>
+    <h4 id="confirm-title">⚠️ 確認刪除</h4>
     <p id="confirm-msg">確定要刪除此帳號嗎？此操作無法復原。</p>
     <div class="btns">
-      <button class="btn btn-ghost" onclick="closeConfirm()">取消</button>
-      <button class="btn btn-danger" id="confirm-ok">確定刪除</button>
+      <button class="btn btn-ghost" id="confirm-cancel" onclick="closeConfirm()">取消</button>
+      <button class="btn btn-danger" id="confirm-ok" onclick="confirmOk()">確定刪除</button>
     </div>
   </div>
 </div>
