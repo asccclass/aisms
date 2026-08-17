@@ -1,8 +1,8 @@
 <div class="modal-overlay" id="platform-request-export-modal">
   <div class="modal" style="max-width: 560px;">
-    <h3>⬇ 匯出 04-078 DOCX</h3>
+    <h3>⬇ 匯出 04-078 申請表</h3>
     <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px;">
-      匯出前可先補填系統科辦理結果欄位，下載的 Word 檔會自動帶入承辦人、權責主管與審查意見。
+      匯出前可先補填系統科辦理結果欄位，下載的 Word 或 PDF 檔會自動帶入承辦人、權責主管與審查意見。
     </p>
     <div class="form-grid">
       <div class="form-group">
@@ -20,7 +20,8 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('platform-request-export-modal')">取消</button>
-      <button class="btn btn-primary" onclick="confirmDownloadPlatformRequestDocx()">確認下載</button>
+      <button class="btn btn-ghost" onclick="confirmDownloadPlatformRequestDocx()">下載 DOCX</button>
+      <button class="btn btn-primary" onclick="confirmDownloadPlatformRequestPdf()">下載 PDF</button>
     </div>
   </div>
 </div>

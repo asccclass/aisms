@@ -3,7 +3,7 @@
   const modalPartialPath = '/partials/platform-request-modal.html';
   const exportModalRootId = 'feature-platform-request-export-root';
   const exportModalPartialPath = '/partials/platform-request-export-modal.html';
-  const exportStoragePrefix = 'isms_platform_export_docx_reviewers';
+  const exportStoragePrefix = 'isms_platform_export_reviewers';
   const fields = [
     'request_date', 'applicant_name', 'applicant_department', 'applicant_title',
     'office_phone', 'email', 'pi_name', 'system_name', 'system_alias',
@@ -128,11 +128,11 @@
         <td>${esc(item.request_start_date)}<br><span class="hint">${esc(item.request_end_date)}</span></td>
         <td>${esc(item.email)}</td>
         <td>${statusBadge(item.status)}</td>
-        <td><div class="actions"><button class="btn btn-ghost btn-sm" onclick="downloadPlatformRequestDocx(${item.id})">⬇</button><button class="btn btn-ghost btn-sm" onclick="openPlatformRequestEdit(${item.id})">✏️</button><button class="btn btn-danger btn-sm" onclick="confirmDeletePlatformRequest(${item.id}, '${escAttr(item.system_name)}')">🗑️</button></div></td>
+        <td><div class="actions"><button class="btn btn-ghost btn-sm" onclick="openPlatformRequestExport(${item.id})">⬇</button><button class="btn btn-ghost btn-sm" onclick="openPlatformRequestEdit(${item.id})">✏️</button><button class="btn btn-danger btn-sm" onclick="confirmDeletePlatformRequest(${item.id}, '${escAttr(item.system_name)}')">🗑️</button></div></td>
       </tr>`).join('');
   };
 
-  window.downloadPlatformRequestDocx = async function downloadPlatformRequestDocx(id) {
+  window.openPlatformRequestExport = async function openPlatformRequestExport(id) {
     const loaded = await ensurePlatformRequestExportModalLoaded();
     if (!loaded) return;
     platformRequestExportId = id;
@@ -143,7 +143,7 @@
     document.getElementById('platform-request-export-modal').classList.add('open');
   };
 
-  window.confirmDownloadPlatformRequestDocx = function confirmDownloadPlatformRequestDocx() {
+  function buildPlatformRequestExportURL(format) {
     if (!platformRequestExportId) return;
     const params = new URLSearchParams();
     const handlerName = document.getElementById('platform-export-handler').value.trim();
@@ -157,9 +157,19 @@
     saveExportFields(handlerName, managerName, reviewNotes);
     closeModal('platform-request-export-modal');
 
-    let url = API + '/api/platform-requests/' + platformRequestExportId + '/export-docx';
+    let url = API + '/api/platform-requests/' + platformRequestExportId + '/export-' + format;
     if ([...params].length) url += '?' + params.toString();
-    window.location.href = url;
+    return url;
+  }
+
+  window.confirmDownloadPlatformRequestDocx = function confirmDownloadPlatformRequestDocx() {
+    const url = buildPlatformRequestExportURL('docx');
+    if (url) window.location.href = url;
+  };
+
+  window.confirmDownloadPlatformRequestPdf = function confirmDownloadPlatformRequestPdf() {
+    const url = buildPlatformRequestExportURL('pdf');
+    if (url) window.location.href = url;
   };
 
   window.openPlatformRequestCreate = async function openPlatformRequestCreate() {

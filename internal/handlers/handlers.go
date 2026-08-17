@@ -9,6 +9,7 @@ import (
 	"isms-privilege/internal/docxexport"
 	"isms-privilege/internal/mailer"
 	"isms-privilege/internal/models"
+	"isms-privilege/internal/pdfexport"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -124,12 +125,20 @@ func buildExportFilename(accounts []models.PrivilegedAccount) string {
 }
 
 func buildPlatformRequestExportFilename(req models.SystemPlatformRequest) string {
+	return buildPlatformRequestExportFilenameWithExt(req, ".docx")
+}
+
+func buildPlatformRequestPDFExportFilename(req models.SystemPlatformRequest) string {
+	return buildPlatformRequestExportFilenameWithExt(req, ".pdf")
+}
+
+func buildPlatformRequestExportFilenameWithExt(req models.SystemPlatformRequest, ext string) string {
 	datePart := strings.TrimSpace(req.RequestDate)
 	if datePart == "" {
 		datePart = time.Now().Format("20060102")
 	}
 	systemName := sanitizeFilenamePart(firstNonEmpty(req.SystemName, "system-platform-request"))
-	return fmt.Sprintf("ISMS-04-078_系統平台申請表_%s_%s.docx", systemName, datePart)
+	return fmt.Sprintf("ISMS-04-078_系統平台申請表_%s_%s%s", systemName, datePart, ext)
 }
 
 func sanitizeFilenamePart(value string) string {
@@ -271,6 +280,51 @@ func (h *Handler) ExportSystemPlatformRequestDOCX(w http.ResponseWriter, r *http
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename*=UTF-8''%s", filename))
 	w.Header().Set("Content-Length", strconv.Itoa(len(docx)))
 	_, _ = w.Write(docx)
+}
+
+func (h *Handler) ExportSystemPlatformRequestPDF(w http.ResponseWriter, r *http.Request) {
+	id, err := idFromPath(r, "/api/platform-requests/")
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+		return
+	}
+	req, err := h.DB.GetSystemPlatformRequest(id)
+	if err != nil {
+		writeJSON(w, 404, map[string]string{"error": "not found"})
+		return
+	}
+
+	templatePath := filepath.Join("assets", "templates", "ISMS-04-078-template.docx")
+	docxBytes, err := docxexport.GeneratePlatformRequest(docxexport.PlatformRequestExportOptions{
+		TemplatePath: templatePath,
+		FormName:     "系統平台申請表",
+		FormCode:     "ISMS-04-078",
+		Version:      "1.0",
+		Department:   firstNonEmpty(os.Getenv("DOCX_PLATFORM_OWNER_DEPARTMENT"), "系統科"),
+		HandlerName:  strings.TrimSpace(r.URL.Query().Get("handler_name")),
+		ManagerName:  strings.TrimSpace(r.URL.Query().Get("manager_name")),
+		ReviewNotes:  strings.TrimSpace(r.URL.Query().Get("review_notes")),
+		Request:      *req,
+	})
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	pdfBytes, err := pdfexport.ConvertDOCXToPDF(pdfexport.ConvertOptions{
+		InputFilename: buildPlatformRequestExportFilename(*req),
+		InputBytes:    docxBytes,
+	})
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	filename := buildPlatformRequestPDFExportFilename(*req)
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename*=UTF-8''%s", filename))
+	w.Header().Set("Content-Length", strconv.Itoa(len(pdfBytes)))
+	_, _ = w.Write(pdfBytes)
 }
 
 // GET /api/accounts/{id}
@@ -877,6 +931,14 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 		if strings.HasSuffix(r.URL.Path, "/export-docx") {
 			if r.Method == http.MethodGet {
 				h.ExportSystemPlatformRequestDOCX(w, r)
+			} else {
+				http.Error(w, "method not allowed", 405)
+			}
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/export-pdf") {
+			if r.Method == http.MethodGet {
+				h.ExportSystemPlatformRequestPDF(w, r)
 			} else {
 				http.Error(w, "method not allowed", 405)
 			}

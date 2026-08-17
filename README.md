@@ -87,6 +87,7 @@ www/html/
 | PUT    | `/api/platform-requests/{id}` | 更新單一 04-078 申請資料 |
 | DELETE | `/api/platform-requests/{id}` | 刪除單一 04-078 申請資料 |
 | GET    | `/api/platform-requests/{id}/export-docx` | 匯出單筆 04-078 申請資料為 DOCX |
+| GET    | `/api/platform-requests/{id}/export-pdf` | 匯出單筆 04-078 申請資料為 PDF |
 | POST   | `/api/notify-all` | 批次通知全部有效帳號 |
 | GET    | `/api/stats` | 統計數字 |
 | GET    | `/api/notification-logs` | 通知記錄 |
@@ -122,6 +123,28 @@ www/html/
 
 ```http
 GET /api/platform-requests/12/export-docx?handler_name=王小明&manager_name=陳主管&review_notes=同意上架，請附測試報告
+```
+
+#### `GET /api/platform-requests/{id}/export-pdf`
+
+匯出單筆 **ISMS-04-078 系統平台申請表** 為 PDF (`.pdf`) 檔案。
+
+說明：
+
+- `id` 為申請資料主鍵。
+- 匯出內容會帶入該筆申請的欄位資料，例如申請人、系統名稱、申請期間、環境、作業系統、備份需求與簽章欄位。
+- 可額外帶入下列查詢參數，直接寫進「系統科辦理結果」區塊：
+- `handler_name`：承辦人
+- `manager_name`：權責主管
+- `review_notes`：審查意見 / 安裝或移除路徑
+- 回傳內容型別為 `application/pdf`
+- 此端點會先依原始 DOCX 樣板產生文件，再呼叫 LibreOffice (`soffice`) 轉成 PDF，以保留原樣板的表頭、表格與表尾版面。
+- 若執行環境未安裝 LibreOffice，API 會回傳轉檔器不存在的錯誤訊息。
+
+範例：
+
+```http
+GET /api/platform-requests/12/export-pdf?handler_name=王小明&manager_name=陳主管&review_notes=同意上架，請附測試報告
 ```
 
 #### `GET /api/accounts/export-docx`
@@ -162,6 +185,7 @@ GET /api/accounts/export-docx?status=active&inventory_by=王小明&group_leader=
 
 - Go 1.21+（需含 CGO 支援 sqlite3）
 - GCC / musl（Alpine 環境：`apk add gcc musl-dev sqlite-dev`）
+- 若需使用 `GET /api/platform-requests/{id}/export-pdf`，執行環境必須額外安裝 LibreOffice，並確保 `soffice` 可由系統 `PATH` 呼叫
 
 ### 2. 設定 envfile
 
@@ -187,6 +211,9 @@ SMTP_FROM=ISMS系統 <your-email@gmail.com>
 DOCX_OWNER_DEPARTMENT=資安科
 DOCX_INVENTORY_BY=
 DOCX_GROUP_LEADER=
+
+# 04-078 PDF 匯出字型
+# 請保留 assets/fonts/NotoSansTC-VF.ttf，確保繁中 PDF 正常顯示
 
 # Google 登入限制與單位推估
 GOOGLE_ALLOWED_DOMAINS=example.org,sinica.edu.tw
@@ -535,6 +562,11 @@ docker run -d \
   --name isms \
   isms-privilege
 ```
+
+補充：
+
+- 目前 Dockerfile 已包含 LibreOffice，因此容器內可直接使用 `04-078` 的 PDF 匯出功能。
+- 若是在本機 Windows / Linux 直接執行 binary，請先自行安裝 LibreOffice，並確認 `soffice` 或 `soffice.exe` 可在命令列執行。
 
 ---
 
