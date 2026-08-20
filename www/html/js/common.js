@@ -19,7 +19,7 @@ window.formEditingId = null;
 window.notifyId = null;
 window.deleteId = null;
 window.searchTimer = null;
-window.profileTargets = ['user-profile-dash', 'user-profile-acc', 'user-profile-forms', 'user-profile-platform'];
+window.profileTargets = ['user-profile-dash', 'user-profile-acc', 'user-profile-forms', 'user-profile-platform', 'user-profile-firewall'];
 window.profileExpanded = false;
 window.currentUserProfile = null;
 window.modalSnapshotGetters = {};
@@ -49,6 +49,7 @@ window.showPage = function showPage(name, evt) {
   if (evt && evt.currentTarget) evt.currentTarget.classList.add('active');
   if (name === 'dashboard') loadDashboardPage();
   if (name === 'accounts') loadAccounts();
+  if (name === 'firewall-requests') loadFirewallRequests();
   if (name === 'platform-requests') loadPlatformRequests();
   if (name === 'forms') loadFormsManagement();
   if (name === 'notifications') loadLogs();

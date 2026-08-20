@@ -25,6 +25,7 @@ type Handler struct {
 
 var dashboardProviders = []models.DashboardFormProvider{
 	{Key: "privileged_accounts", Label: "特殊權限帳號資料", Description: "使用 privileged_accounts 資料表作為首頁表單資料來源"},
+	{Key: "firewall_requests", Label: "防火牆申請資料", Description: "使用 firewall_requests 資料表作為首頁表單資料來源"},
 	{Key: "system_platform_requests", Label: "系統平台申請資料", Description: "使用 system_platform_requests 資料表作為首頁表單資料來源"},
 	{Key: "placeholder", Label: "示範骨架 / 尚未接資料", Description: "保留表單卡片與說明，首頁顯示空狀態"},
 	{Key: "custom_table_template", Label: "自訂資料表範本", Description: "作為未來接新資料表的 provider 樣板，預設先回傳空資料"},
@@ -167,6 +168,84 @@ func firstNonEmpty(values ...string) string {
 }
 
 // ---- System Platform Requests CRUD ----
+
+func (h *Handler) ListFirewallRequests(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.DB.ListFirewallRequests()
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, rows)
+}
+
+func (h *Handler) GetFirewallRequest(w http.ResponseWriter, r *http.Request) {
+	id, err := idFromPath(r, "/api/firewall-requests/")
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+		return
+	}
+	row, err := h.DB.GetFirewallRequest(id)
+	if err != nil {
+		writeJSON(w, 404, map[string]string{"error": "not found"})
+		return
+	}
+	writeJSON(w, 200, row)
+}
+
+func (h *Handler) CreateFirewallRequest(w http.ResponseWriter, r *http.Request) {
+	var req models.FirewallRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+	req.Creator = GetUserEmail(r)
+	if strings.TrimSpace(req.Status) == "" {
+		req.Status = "active"
+	}
+	id, err := h.DB.CreateFirewallRequest(&req)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	req.ID = int(id)
+	writeJSON(w, 201, req)
+}
+
+func (h *Handler) UpdateFirewallRequest(w http.ResponseWriter, r *http.Request) {
+	id, err := idFromPath(r, "/api/firewall-requests/")
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+		return
+	}
+	var req models.FirewallRequest
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+	req.ID = id
+	existing, _ := h.DB.GetFirewallRequest(id)
+	if existing != nil {
+		req.Creator = existing.Creator
+	}
+	if err := h.DB.UpdateFirewallRequest(&req); err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, req)
+}
+
+func (h *Handler) DeleteFirewallRequest(w http.ResponseWriter, r *http.Request) {
+	id, err := idFromPath(r, "/api/firewall-requests/")
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+		return
+	}
+	if err := h.DB.DeleteFirewallRequest(id); err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]string{"message": "deleted"})
+}
 
 func (h *Handler) ListSystemPlatformRequests(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.DB.ListSystemPlatformRequests()
@@ -712,6 +791,8 @@ func (h *Handler) loadDashboardRecords(form models.DashboardForm) ([]models.Dash
 	switch form.ProviderKey {
 	case "privileged_accounts":
 		return h.loadPrivilegedAccountDashboardRecords()
+	case "firewall_requests":
+		return h.loadFirewallRequestDashboardRecords()
 	case "system_platform_requests":
 		return h.loadSystemPlatformRequestDashboardRecords()
 	case "placeholder":
@@ -748,6 +829,33 @@ func (h *Handler) loadPrivilegedAccountDashboardRecords() ([]models.DashboardRec
 
 func (h *Handler) loadPlaceholderDashboardRecords() ([]models.DashboardRecord, error) {
 	return []models.DashboardRecord{}, nil
+}
+
+func (h *Handler) loadFirewallRequestDashboardRecords() ([]models.DashboardRecord, error) {
+	rows, err := h.DB.ListFirewallRequests()
+	if err != nil {
+		return nil, err
+	}
+	records := make([]models.DashboardRecord, 0, len(rows))
+	for _, row := range rows {
+		secondary := strings.TrimSpace(row.FirewallZone)
+		if secondary == "" {
+			secondary = fmt.Sprintf("%s -> %s", row.SourceZone, row.DestinationZone)
+		} else {
+			secondary = fmt.Sprintf("%s / %s -> %s", secondary, row.SourceZone, row.DestinationZone)
+		}
+		records = append(records, models.DashboardRecord{
+			ID:            row.ID,
+			PrimaryName:   row.SystemName,
+			SecondaryName: secondary,
+			OwnerName:     row.Creator,
+			Status:        row.Status,
+			InventoryDate: row.RequestDate,
+			UpdatedAt:     row.UpdatedAt,
+			Email:         "",
+		})
+	}
+	return records, nil
 }
 
 func (h *Handler) loadSystemPlatformRequestDashboardRecords() ([]models.DashboardRecord, error) {
@@ -922,6 +1030,30 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 			h.ListSystemPlatformRequests(w, r)
 		case http.MethodPost:
 			h.CreateSystemPlatformRequest(w, r)
+		default:
+			http.Error(w, "method not allowed", 405)
+		}
+	}))
+
+	mux.HandleFunc("/api/firewall-requests", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			h.ListFirewallRequests(w, r)
+		case http.MethodPost:
+			h.CreateFirewallRequest(w, r)
+		default:
+			http.Error(w, "method not allowed", 405)
+		}
+	}))
+
+	mux.HandleFunc("/api/firewall-requests/", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			h.GetFirewallRequest(w, r)
+		case http.MethodPut:
+			h.UpdateFirewallRequest(w, r)
+		case http.MethodDelete:
+			h.DeleteFirewallRequest(w, r)
 		default:
 			http.Error(w, "method not allowed", 405)
 		}

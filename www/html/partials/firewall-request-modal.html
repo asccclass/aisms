@@ -1,0 +1,31 @@
+<div class="modal-overlay" id="firewall-request-modal">
+  <div class="modal" style="width: 900px; max-width: 96vw;">
+    <h3 id="firewall-request-modal-title">新增防火牆申請</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>申請日期</label><input id="fr-request_date" class="form-control" placeholder="2026/06/10"></div>
+      <div class="form-group"><label>狀態</label><select id="fr-status" class="form-control"><option value="active">進行中</option><option value="pending">待追蹤</option><option value="closed">已完成</option></select></div>
+      <div class="form-group"><label>No.</label><input id="fr-id_display" class="form-control" placeholder="系統自動編號" disabled></div>
+      <div class="form-group"><label>舊表單編號</label><input id="fr-legacy_form_number" class="form-control"></div>
+      <div class="form-group"><label>系統名稱</label><input id="fr-system_name" class="form-control"></div>
+      <div class="form-group"><label>執行動作</label><input id="fr-action" class="form-control" placeholder="開通"></div>
+      <div class="form-group"><label>用途類型</label><input id="fr-purpose_type" class="form-control" placeholder="常態性服務"></div>
+      <div class="form-group"><label>Protocol Type</label><input id="fr-protocol_type" class="form-control" placeholder="TCP 80,443,22"></div>
+      <div class="form-group"><label>來源區域</label><input id="fr-source_zone" class="form-control"></div>
+      <div class="form-group"><label>來源區域(2)</label><input id="fr-source_zone2" class="form-control"></div>
+      <div class="form-group full"><label>來源位址 IP</label><input id="fr-source_ip" class="form-control"></div>
+      <div class="form-group"><label>目的地區域</label><input id="fr-destination_zone" class="form-control"></div>
+      <div class="form-group"><label>目的地區域(2)</label><input id="fr-destination_zone2" class="form-control"></div>
+      <div class="form-group full"><label>目的地位址 IP</label><input id="fr-destination_ip" class="form-control"></div>
+      <div class="form-group"><label>起始日期</label><input id="fr-start_date" class="form-control" placeholder="2026/06/16"></div>
+      <div class="form-group"><label>結束日期</label><input id="fr-end_date" class="form-control" placeholder="2027/09/15"></div>
+      <div class="form-group"><label>Firewall 區域</label><input id="fr-firewall_zone" class="form-control" placeholder="機房:DC"></div>
+      <div class="form-group"><label>Firewall ID</label><input id="fr-firewall_id" class="form-control" placeholder="D-260610-1-1"></div>
+      <div class="form-group full"><label>規則說明</label><textarea id="fr-rule_description" class="form-control" rows="3"></textarea></div>
+      <div class="form-group full"><label>備註</label><textarea id="fr-remarks" class="form-control" rows="2"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('firewall-request-modal')">取消</button>
+      <button class="btn btn-primary" onclick="saveFirewallRequest()">儲存</button>
+    </div>
+  </div>
+</div>

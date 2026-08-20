@@ -131,6 +131,32 @@ func (d *DB) migrate() error {
 		created_at             DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at             DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
+
+	CREATE TABLE IF NOT EXISTS firewall_requests (
+		id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+		legacy_form_number   TEXT    NOT NULL DEFAULT '',
+		system_name          TEXT    NOT NULL DEFAULT '',
+		action               TEXT    NOT NULL DEFAULT '',
+		purpose_type         TEXT    NOT NULL DEFAULT '',
+		source_zone          TEXT    NOT NULL DEFAULT '',
+		source_zone2         TEXT    NOT NULL DEFAULT '',
+		source_ip            TEXT    NOT NULL DEFAULT '',
+		destination_zone     TEXT    NOT NULL DEFAULT '',
+		destination_zone2    TEXT    NOT NULL DEFAULT '',
+		destination_ip       TEXT    NOT NULL DEFAULT '',
+		protocol_type        TEXT    NOT NULL DEFAULT '',
+		start_date           TEXT    NOT NULL DEFAULT '',
+		end_date             TEXT    NOT NULL DEFAULT '',
+		request_date         TEXT    NOT NULL DEFAULT '',
+		rule_description     TEXT    NOT NULL DEFAULT '',
+		firewall_zone        TEXT    NOT NULL DEFAULT '',
+		firewall_id          TEXT    NOT NULL DEFAULT '',
+		status               TEXT    NOT NULL DEFAULT 'active',
+		creator              TEXT    NOT NULL DEFAULT '',
+		remarks              TEXT    NOT NULL DEFAULT '',
+		created_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
 	`
 	_, err := d.conn.Exec(schema)
 	_, _ = d.conn.Exec(`ALTER TABLE privileged_accounts ADD COLUMN environment TEXT NOT NULL DEFAULT '正式區'`)
@@ -139,6 +165,7 @@ func (d *DB) migrate() error {
 	if err == nil {
 		_ = d.seedDashboardForms()
 		_ = d.seedCustomTableTemplateRecords()
+		_ = d.seedFirewallRequests()
 	}
 	return err
 }
@@ -354,6 +381,27 @@ func (d *DB) seedDashboardForms() error {
 			},
 		},
 		{
+			Key:          "isms-04-042",
+			Code:         "ISMS-04-042",
+			ShortCode:    "04-042",
+			Name:         "防火牆申請單",
+			Description:  "管理防火牆規則申請、來源與目的區域、IP、通訊埠與有效期間。",
+			DetailTitle:  "最近防火牆申請",
+			EmptyText:    "尚無防火牆申請資料",
+			ProviderKey:  "firewall_requests",
+			DisplayOrder: 2,
+			Enabled:      true,
+			FocusItems: models.DashboardFocusItems{
+				ActiveTitle:  "生效中規則",
+				ActiveMeta:   "目前正在使用或生效中的防火牆申請",
+				PendingTitle: "待追蹤申請",
+				PendingMeta:  "待審核、待補件或待確認的規則申請",
+				ClosedTitle:  "已完成申請",
+				ClosedMeta:   "已結案、停用或到期後完成處理的申請",
+				RecentTitle:  "最近申請紀錄",
+			},
+		},
+		{
 			Key:          "isms-04-078",
 			Code:         "ISMS-04-078",
 			ShortCode:    "04-078",
@@ -362,7 +410,7 @@ func (d *DB) seedDashboardForms() error {
 			DetailTitle:  "最近申請資料",
 			EmptyText:    "尚無系統平台申請資料",
 			ProviderKey:  "system_platform_requests",
-			DisplayOrder: 2,
+			DisplayOrder: 3,
 			Enabled:      true,
 			FocusItems: models.DashboardFocusItems{
 				ActiveTitle:  "進行中申請",
@@ -383,7 +431,7 @@ func (d *DB) seedDashboardForms() error {
 			StatusNormalText:         "待建置",
 			StatusNeedsAttentionText: "待建置",
 			ProviderKey:              "placeholder",
-			DisplayOrder:             3,
+			DisplayOrder:             4,
 			Enabled:                  true,
 			FocusItems: models.DashboardFocusItems{
 				ActiveTitle:  "已建資料",
@@ -423,6 +471,25 @@ func (d *DB) seedCustomTableTemplateRecords() error {
 	_, err := d.conn.Exec(`INSERT INTO custom_table_template_records (title,category,owner_name,status,inventory_date,email) VALUES
 		('示範資料一', '範本類別', '王小明', 'active', '20260810', 'demo1@example.com'),
 		('示範資料二', '範本類別', '李小華', 'pending', '20260809', 'demo2@example.com')`)
+	return err
+}
+
+func (d *DB) seedFirewallRequests() error {
+	var count int
+	if err := d.conn.QueryRow(`SELECT COUNT(*) FROM firewall_requests`).Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	_, err := d.conn.Exec(`INSERT INTO firewall_requests (
+		legacy_form_number,system_name,action,purpose_type,source_zone,source_zone2,source_ip,
+		destination_zone,destination_zone2,destination_ip,protocol_type,start_date,end_date,
+		request_date,rule_description,firewall_zone,firewall_id,status
+	) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		"", "AI PRO 管理系統", "開通", "常態性服務", "campus", "", "10.109.193.19/32",
+		"資料中心", "I", "10.109.233.61/32", "TCP 80,443,22", "2026/06/16", "2027/09/15",
+		"2026/06/10", "開通桌機至 AI PRO 管理系統主機連線", "機房:DC", "D-260610-1-1", "active")
 	return err
 }
 
@@ -665,5 +732,54 @@ func (d *DB) UpdateSystemPlatformRequest(r *models.SystemPlatformRequest) error 
 
 func (d *DB) DeleteSystemPlatformRequest(id int) error {
 	_, err := d.conn.Exec(`DELETE FROM system_platform_requests WHERE id=?`, id)
+	return err
+}
+
+func (d *DB) ListFirewallRequests() ([]models.FirewallRequest, error) {
+	rows, err := d.conn.Query(`SELECT id,legacy_form_number,system_name,action,purpose_type,source_zone,source_zone2,source_ip,destination_zone,destination_zone2,destination_ip,protocol_type,start_date,end_date,request_date,rule_description,firewall_zone,firewall_id,status,creator,remarks,created_at,updated_at FROM firewall_requests ORDER BY id DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []models.FirewallRequest
+	for rows.Next() {
+		var r models.FirewallRequest
+		if err := rows.Scan(&r.ID, &r.LegacyFormNumber, &r.SystemName, &r.Action, &r.PurposeType, &r.SourceZone, &r.SourceZone2, &r.SourceIP, &r.DestinationZone, &r.DestinationZone2, &r.DestinationIP, &r.ProtocolType, &r.StartDate, &r.EndDate, &r.RequestDate, &r.RuleDescription, &r.FirewallZone, &r.FirewallID, &r.Status, &r.Creator, &r.Remarks, &r.CreatedAt, &r.UpdatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, r)
+	}
+	if list == nil {
+		list = []models.FirewallRequest{}
+	}
+	return list, nil
+}
+
+func (d *DB) GetFirewallRequest(id int) (*models.FirewallRequest, error) {
+	row := d.conn.QueryRow(`SELECT id,legacy_form_number,system_name,action,purpose_type,source_zone,source_zone2,source_ip,destination_zone,destination_zone2,destination_ip,protocol_type,start_date,end_date,request_date,rule_description,firewall_zone,firewall_id,status,creator,remarks,created_at,updated_at FROM firewall_requests WHERE id=?`, id)
+	var r models.FirewallRequest
+	if err := row.Scan(&r.ID, &r.LegacyFormNumber, &r.SystemName, &r.Action, &r.PurposeType, &r.SourceZone, &r.SourceZone2, &r.SourceIP, &r.DestinationZone, &r.DestinationZone2, &r.DestinationIP, &r.ProtocolType, &r.StartDate, &r.EndDate, &r.RequestDate, &r.RuleDescription, &r.FirewallZone, &r.FirewallID, &r.Status, &r.Creator, &r.Remarks, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+func (d *DB) CreateFirewallRequest(r *models.FirewallRequest) (int64, error) {
+	res, err := d.conn.Exec(`INSERT INTO firewall_requests (legacy_form_number,system_name,action,purpose_type,source_zone,source_zone2,source_ip,destination_zone,destination_zone2,destination_ip,protocol_type,start_date,end_date,request_date,rule_description,firewall_zone,firewall_id,status,creator,remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		r.LegacyFormNumber, r.SystemName, r.Action, r.PurposeType, r.SourceZone, r.SourceZone2, r.SourceIP, r.DestinationZone, r.DestinationZone2, r.DestinationIP, r.ProtocolType, r.StartDate, r.EndDate, r.RequestDate, r.RuleDescription, r.FirewallZone, r.FirewallID, r.Status, r.Creator, r.Remarks)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func (d *DB) UpdateFirewallRequest(r *models.FirewallRequest) error {
+	_, err := d.conn.Exec(`UPDATE firewall_requests SET legacy_form_number=?,system_name=?,action=?,purpose_type=?,source_zone=?,source_zone2=?,source_ip=?,destination_zone=?,destination_zone2=?,destination_ip=?,protocol_type=?,start_date=?,end_date=?,request_date=?,rule_description=?,firewall_zone=?,firewall_id=?,status=?,creator=?,remarks=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+		r.LegacyFormNumber, r.SystemName, r.Action, r.PurposeType, r.SourceZone, r.SourceZone2, r.SourceIP, r.DestinationZone, r.DestinationZone2, r.DestinationIP, r.ProtocolType, r.StartDate, r.EndDate, r.RequestDate, r.RuleDescription, r.FirewallZone, r.FirewallID, r.Status, r.Creator, r.Remarks, r.ID)
+	return err
+}
+
+func (d *DB) DeleteFirewallRequest(id int) error {
+	_, err := d.conn.Exec(`DELETE FROM firewall_requests WHERE id=?`, id)
 	return err
 }

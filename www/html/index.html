@@ -339,6 +339,9 @@
       <button class="nav-item active" onclick="showPage('dashboard', event)">
         <span class="icon">📊</span> 儀表板
       </button>
+      <button class="nav-item" onclick="showPage('firewall-requests', event)">
+        <span class="icon">🔥</span> 04-042防火牆申請
+      </button>
       <button class="nav-item" onclick="showPage('accounts', event)">
         <span class="icon">👤</span> 04-062特殊權限帳號管理
       </button>
@@ -482,6 +485,39 @@
       </div>
     </div>
 
+    <div class="page" id="page-firewall-requests">
+      <div class="topbar">
+        <h2>🔥 04-042防火牆申請</h2>
+        <div class="topbar-actions">
+          <div class="user-profile" id="user-profile-firewall"></div>
+          <button class="btn btn-primary" onclick="openFirewallRequestCreate()">＋ 新增申請</button>
+        </div>
+      </div>
+      <div class="panel" style="margin-bottom:16px;">
+        <h3>申請資料輸入</h3>
+        <p class="panel-desc">依 ISMS-04-042 樣板紀錄來源與目的區域、IP、通訊埠、有效期間與規則說明。</p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#ID</th>
+              <th>系統名稱 / 舊表單編號</th>
+              <th>執行動作 / 用途類型</th>
+              <th>來源區域 / IP</th>
+              <th>目的地區域 / IP</th>
+              <th>Protocol Type</th>
+              <th>有效期間</th>
+              <th>Firewall 區域 / ID</th>
+              <th>狀態</th>
+              <th width="120">操作</th>
+            </tr>
+          </thead>
+          <tbody id="firewall-requests-body"></tbody>
+        </table>
+      </div>
+    </div>
+
     <div class="page" id="page-forms">
       <div class="topbar">
         <h2>🗂️ 表單管理</h2>
@@ -530,10 +566,12 @@
 <div id="feature-form-config-modal-root"></div>
 <div id="feature-platform-request-modal-root"></div>
 <div id="feature-platform-request-export-root"></div>
+<div id="feature-firewall-request-modal-root"></div>
 <script src="/js/common.js"></script>
 <script src="/js/dashboard.js"></script>
 <script src="/js/accounts.js"></script>
 <script src="/js/platform-requests.js"></script>
+<script src="/js/firewall-requests.js"></script>
 <script src="/js/forms.js"></script>
 <script src="/js/account-modals.js"></script>
 <script src="/js/export-docx.js"></script>
