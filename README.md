@@ -138,8 +138,10 @@ GET /api/platform-requests/12/export-docx?handler_name=王小明&manager_name=�
 - `manager_name`：權責主管
 - `review_notes`：審查意見 / 安裝或移除路徑
 - 回傳內容型別為 `application/pdf`
-- 此端點會先依原始 DOCX 樣板產生文件，再呼叫 LibreOffice (`soffice`) 轉成 PDF，以保留原樣板的表頭、表格與表尾版面。
-- 若執行環境未安裝 LibreOffice，API 會回傳轉檔器不存在的錯誤訊息。
+- 此端點會先依原始 DOCX 樣板產生文件，再轉成 PDF，以保留原樣板的表頭、表格與表尾版面。
+- Windows 環境會優先使用 Microsoft Word COM 自動化轉 PDF。
+- 若 Word COM 不可用，系統會退回 LibreOffice (`soffice`) 轉檔。
+- 若執行環境同時沒有 Word COM 與 LibreOffice，API 會回傳轉檔器不存在的錯誤訊息。
 
 範例：
 
@@ -185,7 +187,9 @@ GET /api/accounts/export-docx?status=active&inventory_by=王小明&group_leader=
 
 - Go 1.21+（需含 CGO 支援 sqlite3）
 - GCC / musl（Alpine 環境：`apk add gcc musl-dev sqlite-dev`）
-- 若需使用 `GET /api/platform-requests/{id}/export-pdf`，執行環境必須額外安裝 LibreOffice，並確保 `soffice` 可由系統 `PATH` 呼叫
+- 若需使用 `GET /api/platform-requests/{id}/export-pdf`：
+- Windows 建議安裝 Microsoft Word，供 Word COM 轉 PDF
+- Linux / 容器環境建議安裝 LibreOffice，並確保 `soffice` 可由系統 `PATH` 呼叫
 
 ### 2. 設定 envfile
 
@@ -566,7 +570,8 @@ docker run -d \
 補充：
 
 - 目前 Dockerfile 已包含 LibreOffice，因此容器內可直接使用 `04-078` 的 PDF 匯出功能。
-- 若是在本機 Windows / Linux 直接執行 binary，請先自行安裝 LibreOffice，並確認 `soffice` 或 `soffice.exe` 可在命令列執行。
+- 若是在本機 Windows 直接執行 binary，建議安裝 Microsoft Word；若未安裝 Word，仍可改裝 LibreOffice。
+- 若是在本機 Linux 直接執行 binary，請先自行安裝 LibreOffice，並確認 `soffice` 可在命令列執行。
 
 ---
 
