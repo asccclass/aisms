@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"isms-privilege/internal/db"
 	"isms-privilege/internal/docxexport"
 	"isms-privilege/internal/mailer"
@@ -16,6 +18,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/xuri/excelize/v2"
 )
 
 type Handler struct {
@@ -25,6 +29,7 @@ type Handler struct {
 
 var dashboardProviders = []models.DashboardFormProvider{
 	{Key: "privileged_accounts", Label: "特殊權限帳號資料", Description: "使用 privileged_accounts 資料表作為首頁表單資料來源"},
+	{Key: "asset_inventory", Label: "資訊資產清冊", Description: "使用 asset_inventory_records 資料表作為首頁表單資料來源"},
 	{Key: "firewall_requests", Label: "防火牆申請資料", Description: "使用 firewall_requests 資料表作為首頁表單資料來源"},
 	{Key: "system_platform_requests", Label: "系統平台申請資料", Description: "使用 system_platform_requests 資料表作為首頁表單資料來源"},
 	{Key: "placeholder", Label: "示範骨架 / 尚未接資料", Description: "保留表單卡片與說明，首頁顯示空狀態"},
@@ -176,6 +181,302 @@ func (h *Handler) ListFirewallRequests(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, rows)
+}
+
+func (h *Handler) ListAssetInventoryRecords(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.getAssetInventoryRecordsForRequest(r)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, rows)
+}
+
+func (h *Handler) getAssetInventoryRecordsForRequest(r *http.Request) ([]models.AssetInventoryRecord, error) {
+	status := strings.TrimSpace(r.URL.Query().Get("status"))
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	assetType := strings.TrimSpace(r.URL.Query().Get("asset_type"))
+	return h.DB.ListAssetInventoryRecordsFiltered(q, status, assetType)
+}
+
+func (h *Handler) GetAssetInventoryRecord(w http.ResponseWriter, r *http.Request) {
+	id, err := idFromPath(r, "/api/asset-inventory/")
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+		return
+	}
+	row, err := h.DB.GetAssetInventoryRecord(id)
+	if err != nil {
+		writeJSON(w, 404, map[string]string{"error": "not found"})
+		return
+	}
+	writeJSON(w, 200, row)
+}
+
+func (h *Handler) CreateAssetInventoryRecord(w http.ResponseWriter, r *http.Request) {
+	var req models.AssetInventoryRecord
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+	req.Creator = GetUserEmail(r)
+	if strings.TrimSpace(req.Status) == "" {
+		req.Status = "active"
+	}
+	id, err := h.DB.CreateAssetInventoryRecord(&req)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	req.ID = int(id)
+	writeJSON(w, 201, req)
+}
+
+func (h *Handler) UpdateAssetInventoryRecord(w http.ResponseWriter, r *http.Request) {
+	id, err := idFromPath(r, "/api/asset-inventory/")
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+		return
+	}
+	var req models.AssetInventoryRecord
+	if err := readJSON(r, &req); err != nil {
+		writeJSON(w, 400, map[string]string{"error": err.Error()})
+		return
+	}
+	req.ID = id
+	existing, _ := h.DB.GetAssetInventoryRecord(id)
+	if existing != nil {
+		req.Creator = existing.Creator
+	}
+	if err := h.DB.UpdateAssetInventoryRecord(&req); err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, req)
+}
+
+func (h *Handler) DeleteAssetInventoryRecord(w http.ResponseWriter, r *http.Request) {
+	id, err := idFromPath(r, "/api/asset-inventory/")
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid id"})
+		return
+	}
+	if err := h.DB.DeleteAssetInventoryRecord(id); err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, map[string]string{"message": "deleted"})
+}
+
+func (h *Handler) ImportAssetInventoryXLSX(w http.ResponseWriter, r *http.Request) {
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "missing upload file"})
+		return
+	}
+	defer file.Close()
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	f, err := excelize.OpenReader(bytes.NewReader(content))
+	if err != nil {
+		writeJSON(w, 400, map[string]string{"error": "invalid excel file"})
+		return
+	}
+	defer f.Close()
+
+	sheetName := "資訊資產清冊"
+	if idx, _ := f.GetSheetIndex(sheetName); idx == -1 {
+		writeJSON(w, 400, map[string]string{"error": "找不到工作表「資訊資產清冊」"})
+		return
+	}
+
+	rows, err := f.GetRows(sheetName)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	imported := 0
+	skipped := 0
+	for i := 7; i < len(rows); i++ {
+		row := rows[i]
+		get := func(idx int) string {
+			if idx < len(row) {
+				return strings.TrimSpace(row[idx])
+			}
+			return ""
+		}
+		record := models.AssetInventoryRecord{
+			SystemName:                 get(0),
+			AssetCode:                  get(1),
+			AssetType:                  get(2),
+			AssetName:                  get(3),
+			VendorName:                 get(4),
+			IsCoreAsset:                firstNonEmpty(get(5), "否"),
+			HasNationalSecurityConcern: firstNonEmpty(get(6), "否"),
+			AssetDescription:           get(7),
+			Quantity:                   firstNonEmpty(get(8), "1"),
+			OsConfigBaseline:           get(9),
+			BrowserConfigBaseline:      get(10),
+			NetworkConfigBaseline:      get(11),
+			ApplicationConfigBaseline:  get(12),
+			OtherConfigBaseline:        get(13),
+			ConfigExceptionCode:        get(14),
+			ManagerDepartment:          get(15),
+			UserDepartment:             get(16),
+			Location:                   get(17),
+			Confidentiality:            get(18),
+			Integrity:                  get(19),
+			Availability:               get(20),
+			AssetValue:                 get(21),
+			LegalCompliance:            get(23),
+			ProtectionLevel:            get(24),
+			Mtpd:                       get(25),
+			Rto:                        get(26),
+			Rpo:                        get(27),
+			Status:                     "active",
+			Creator:                    GetUserEmail(r),
+			Remarks:                    get(28),
+		}
+		if record.SystemName == "" && record.AssetCode == "" && record.AssetName == "" {
+			skipped++
+			continue
+		}
+		if record.AssetType == "" {
+			record.AssetType = "軟體類"
+		}
+		if _, err := h.DB.CreateAssetInventoryRecord(&record); err != nil {
+			writeJSON(w, 500, map[string]string{"error": err.Error()})
+			return
+		}
+		imported++
+	}
+
+	writeJSON(w, 200, map[string]int{"imported": imported, "skipped": skipped})
+}
+
+func (h *Handler) ExportAssetInventoryXLSX(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.getAssetInventoryRecordsForRequest(r)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	f := excelize.NewFile()
+	sheetName := "資訊資產清冊"
+	f.SetSheetName("Sheet1", sheetName)
+
+	headers := []string{
+		"資通系統名稱", "資產編號", "資產類別", "資產名稱", "廠牌/廠商",
+		"是否為核心系統及其相關資產", "是否具危害國家資通安全疑慮？", "資產說明", "數量",
+		"作業系統組態基準編號", "瀏覽器組態基準編號", "網通設備組態基準編號", "應用程式組態基準編號",
+		"其他組態基準編號", "組態例外編號", "管理者(部門)", "使用者(部門)", "存放位置",
+		"機密性(A)", "完整性(B)", "可用性(C)", "資產價值MAX(ABC)", "法律遵循性(D)",
+		"資通系統防護等級MAX(ABCD)", "最大可容忍中斷時間(MTPD)", "復原時間目標(RTO)", "資料復原目標(RPO)", "備註",
+	}
+	for idx, header := range headers {
+		cell, _ := excelize.CoordinatesToCellName(idx+1, 1)
+		_ = f.SetCellValue(sheetName, cell, header)
+	}
+
+	for i, row := range rows {
+		values := []string{
+			row.SystemName, row.AssetCode, row.AssetType, row.AssetName, row.VendorName,
+			row.IsCoreAsset, row.HasNationalSecurityConcern, row.AssetDescription, row.Quantity,
+			row.OsConfigBaseline, row.BrowserConfigBaseline, row.NetworkConfigBaseline, row.ApplicationConfigBaseline,
+			row.OtherConfigBaseline, row.ConfigExceptionCode, row.ManagerDepartment, row.UserDepartment, row.Location,
+			row.Confidentiality, row.Integrity, row.Availability, row.AssetValue, row.LegalCompliance,
+			row.ProtectionLevel, row.Mtpd, row.Rto, row.Rpo, row.Remarks,
+		}
+		for j, value := range values {
+			cell, _ := excelize.CoordinatesToCellName(j+1, i+2)
+			_ = f.SetCellValue(sheetName, cell, value)
+		}
+	}
+	_ = f.SetPanes(sheetName, &excelize.Panes{Freeze: true, Split: false, XSplit: 0, YSplit: 1, TopLeftCell: "A2", ActivePane: "bottomLeft"})
+	_ = f.SetColWidth(sheetName, "A", "AB", 18)
+
+	var buf bytes.Buffer
+	if err := f.Write(&buf); err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	filename := fmt.Sprintf("ISMS-04-008_資訊資產清冊_%s.xlsx", time.Now().Format("20060102"))
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename*=UTF-8''%s", filename))
+	w.Header().Set("Content-Length", strconv.Itoa(buf.Len()))
+	_, _ = w.Write(buf.Bytes())
+}
+
+func (h *Handler) ExportAssetInventoryDOCX(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.getAssetInventoryRecordsForRequest(r)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	templatePath := filepath.Join("assets", "templates", "ISMS-04-062-template.docx")
+	docxBytes, err := docxexport.GenerateAssetInventory(docxexport.AssetInventoryExportOptions{
+		TemplatePath: templatePath,
+		FormName:     "資訊資產清冊",
+		FormCode:     "ISMS-04-008",
+		Version:      "1.6",
+		Department:   firstNonEmpty(os.Getenv("DOCX_OWNER_DEPARTMENT"), "資安科"),
+		Records:      rows,
+	})
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	filename := fmt.Sprintf("ISMS-04-008_資訊資產清冊_%s.docx", time.Now().Format("20060102"))
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename*=UTF-8''%s", filename))
+	w.Header().Set("Content-Length", strconv.Itoa(len(docxBytes)))
+	_, _ = w.Write(docxBytes)
+}
+
+func (h *Handler) ExportAssetInventoryPDF(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.getAssetInventoryRecordsForRequest(r)
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	templatePath := filepath.Join("assets", "templates", "ISMS-04-062-template.docx")
+	docxBytes, err := docxexport.GenerateAssetInventory(docxexport.AssetInventoryExportOptions{
+		TemplatePath: templatePath,
+		FormName:     "資訊資產清冊",
+		FormCode:     "ISMS-04-008",
+		Version:      "1.6",
+		Department:   firstNonEmpty(os.Getenv("DOCX_OWNER_DEPARTMENT"), "資安科"),
+		Records:      rows,
+	})
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	pdfBytes, err := pdfexport.ConvertDOCXToPDF(pdfexport.ConvertOptions{
+		InputFilename: fmt.Sprintf("ISMS-04-008_資訊資產清冊_%s.docx", time.Now().Format("20060102")),
+		InputBytes:    docxBytes,
+	})
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+
+	filename := fmt.Sprintf("ISMS-04-008_資訊資產清冊_%s.pdf", time.Now().Format("20060102"))
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename*=UTF-8''%s", filename))
+	w.Header().Set("Content-Length", strconv.Itoa(len(pdfBytes)))
+	_, _ = w.Write(pdfBytes)
 }
 
 func (h *Handler) GetFirewallRequest(w http.ResponseWriter, r *http.Request) {
@@ -791,6 +1092,8 @@ func (h *Handler) loadDashboardRecords(form models.DashboardForm) ([]models.Dash
 	switch form.ProviderKey {
 	case "privileged_accounts":
 		return h.loadPrivilegedAccountDashboardRecords()
+	case "asset_inventory":
+		return h.loadAssetInventoryDashboardRecords()
 	case "firewall_requests":
 		return h.loadFirewallRequestDashboardRecords()
 	case "system_platform_requests":
@@ -804,6 +1107,33 @@ func (h *Handler) loadDashboardRecords(form models.DashboardForm) ([]models.Dash
 	default:
 		return []models.DashboardRecord{}, nil
 	}
+}
+
+func (h *Handler) loadAssetInventoryDashboardRecords() ([]models.DashboardRecord, error) {
+	rows, err := h.DB.ListAssetInventoryRecords()
+	if err != nil {
+		return nil, err
+	}
+	records := make([]models.DashboardRecord, 0, len(rows))
+	for _, row := range rows {
+		secondary := strings.TrimSpace(row.AssetCode)
+		if secondary == "" {
+			secondary = row.AssetType
+		} else {
+			secondary = fmt.Sprintf("%s / %s", row.AssetCode, row.AssetType)
+		}
+		records = append(records, models.DashboardRecord{
+			ID:            row.ID,
+			PrimaryName:   firstNonEmpty(row.AssetName, row.SystemName),
+			SecondaryName: secondary,
+			OwnerName:     row.ManagerDepartment,
+			Status:        row.Status,
+			InventoryDate: row.SystemName,
+			UpdatedAt:     row.UpdatedAt,
+			Email:         "",
+		})
+	}
+	return records, nil
 }
 
 func (h *Handler) loadPrivilegedAccountDashboardRecords() ([]models.DashboardRecord, error) {
@@ -1035,6 +1365,49 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 		}
 	}))
 
+	mux.HandleFunc("/api/asset-inventory", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			h.ListAssetInventoryRecords(w, r)
+		case http.MethodPost:
+			h.CreateAssetInventoryRecord(w, r)
+		default:
+			http.Error(w, "method not allowed", 405)
+		}
+	}))
+
+	mux.HandleFunc("/api/asset-inventory/import-xlsx", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			h.ImportAssetInventoryXLSX(w, r)
+			return
+		}
+		http.Error(w, "method not allowed", 405)
+	}))
+
+	mux.HandleFunc("/api/asset-inventory/export-xlsx", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			h.ExportAssetInventoryXLSX(w, r)
+			return
+		}
+		http.Error(w, "method not allowed", 405)
+	}))
+
+	mux.HandleFunc("/api/asset-inventory/export-docx", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			h.ExportAssetInventoryDOCX(w, r)
+			return
+		}
+		http.Error(w, "method not allowed", 405)
+	}))
+
+	mux.HandleFunc("/api/asset-inventory/export-pdf", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			h.ExportAssetInventoryPDF(w, r)
+			return
+		}
+		http.Error(w, "method not allowed", 405)
+	}))
+
 	mux.HandleFunc("/api/firewall-requests", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -1054,6 +1427,19 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 			h.UpdateFirewallRequest(w, r)
 		case http.MethodDelete:
 			h.DeleteFirewallRequest(w, r)
+		default:
+			http.Error(w, "method not allowed", 405)
+		}
+	}))
+
+	mux.HandleFunc("/api/asset-inventory/", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			h.GetAssetInventoryRecord(w, r)
+		case http.MethodPut:
+			h.UpdateAssetInventoryRecord(w, r)
+		case http.MethodDelete:
+			h.DeleteAssetInventoryRecord(w, r)
 		default:
 			http.Error(w, "method not allowed", 405)
 		}

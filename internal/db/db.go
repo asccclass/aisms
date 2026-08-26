@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"isms-privilege/internal/models"
+	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -157,6 +158,42 @@ func (d *DB) migrate() error {
 		created_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
+
+	CREATE TABLE IF NOT EXISTS asset_inventory_records (
+		id                            INTEGER PRIMARY KEY AUTOINCREMENT,
+		system_name                   TEXT    NOT NULL DEFAULT '',
+		asset_code                    TEXT    NOT NULL DEFAULT '',
+		asset_type                    TEXT    NOT NULL DEFAULT '',
+		asset_name                    TEXT    NOT NULL DEFAULT '',
+		vendor_name                   TEXT    NOT NULL DEFAULT '',
+		is_core_asset                 TEXT    NOT NULL DEFAULT '否',
+		has_national_security_concern TEXT    NOT NULL DEFAULT '否',
+		asset_description             TEXT    NOT NULL DEFAULT '',
+		quantity                      TEXT    NOT NULL DEFAULT '1',
+		os_config_baseline            TEXT    NOT NULL DEFAULT '',
+		browser_config_baseline       TEXT    NOT NULL DEFAULT '',
+		network_config_baseline       TEXT    NOT NULL DEFAULT '',
+		application_config_baseline   TEXT    NOT NULL DEFAULT '',
+		other_config_baseline         TEXT    NOT NULL DEFAULT '',
+		config_exception_code         TEXT    NOT NULL DEFAULT '',
+		manager_department            TEXT    NOT NULL DEFAULT '',
+		user_department               TEXT    NOT NULL DEFAULT '',
+		location                      TEXT    NOT NULL DEFAULT '',
+		confidentiality               TEXT    NOT NULL DEFAULT '',
+		integrity                     TEXT    NOT NULL DEFAULT '',
+		availability                  TEXT    NOT NULL DEFAULT '',
+		asset_value                   TEXT    NOT NULL DEFAULT '',
+		legal_compliance              TEXT    NOT NULL DEFAULT '',
+		protection_level              TEXT    NOT NULL DEFAULT '',
+		mtpd                          TEXT    NOT NULL DEFAULT '',
+		rto                           TEXT    NOT NULL DEFAULT '',
+		rpo                           TEXT    NOT NULL DEFAULT '',
+		status                        TEXT    NOT NULL DEFAULT 'active',
+		creator                       TEXT    NOT NULL DEFAULT '',
+		remarks                       TEXT    NOT NULL DEFAULT '',
+		created_at                    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at                    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
 	`
 	_, err := d.conn.Exec(schema)
 	_, _ = d.conn.Exec(`ALTER TABLE privileged_accounts ADD COLUMN environment TEXT NOT NULL DEFAULT '正式區'`)
@@ -166,6 +203,7 @@ func (d *DB) migrate() error {
 		_ = d.seedDashboardForms()
 		_ = d.seedCustomTableTemplateRecords()
 		_ = d.seedFirewallRequests()
+		_ = d.seedAssetInventoryRecords()
 	}
 	return err
 }
@@ -360,6 +398,27 @@ func defaultFocusItems() models.DashboardFocusItems {
 func (d *DB) seedDashboardForms() error {
 	defaultForms := []models.DashboardForm{
 		{
+			Key:          "isms-04-008",
+			Code:         "ISMS-04-008",
+			ShortCode:    "04-008",
+			Name:         "資訊資產清冊",
+			Description:  "管理資訊資產主檔、資產價值、組態基準與營運關鍵指標。",
+			DetailTitle:  "最近資產資料",
+			EmptyText:    "尚無資訊資產清冊資料",
+			ProviderKey:  "asset_inventory",
+			DisplayOrder: 1,
+			Enabled:      true,
+			FocusItems: models.DashboardFocusItems{
+				ActiveTitle:  "在管資產",
+				ActiveMeta:   "目前仍納入清冊管理的資訊資產",
+				PendingTitle: "待補資料",
+				PendingMeta:  "尚待確認、補件或盤點中的資產",
+				ClosedTitle:  "已下架資產",
+				ClosedMeta:   "已停用、淘汰或結案的資產",
+				RecentTitle:  "最近更新資產",
+			},
+		},
+		{
 			Key:          "isms-04-062",
 			Code:         "ISMS-04-062",
 			ShortCode:    "04-062",
@@ -368,7 +427,7 @@ func (d *DB) seedDashboardForms() error {
 			DetailTitle:  "最近盤點清單",
 			EmptyText:    "尚無特殊權限帳號資料",
 			ProviderKey:  "privileged_accounts",
-			DisplayOrder: 1,
+			DisplayOrder: 2,
 			Enabled:      true,
 			FocusItems: models.DashboardFocusItems{
 				ActiveTitle:  "使用中帳號",
@@ -389,7 +448,7 @@ func (d *DB) seedDashboardForms() error {
 			DetailTitle:  "最近防火牆申請",
 			EmptyText:    "尚無防火牆申請資料",
 			ProviderKey:  "firewall_requests",
-			DisplayOrder: 2,
+			DisplayOrder: 3,
 			Enabled:      true,
 			FocusItems: models.DashboardFocusItems{
 				ActiveTitle:  "生效中規則",
@@ -410,7 +469,7 @@ func (d *DB) seedDashboardForms() error {
 			DetailTitle:  "最近申請資料",
 			EmptyText:    "尚無系統平台申請資料",
 			ProviderKey:  "system_platform_requests",
-			DisplayOrder: 3,
+			DisplayOrder: 4,
 			Enabled:      true,
 			FocusItems: models.DashboardFocusItems{
 				ActiveTitle:  "進行中申請",
@@ -431,7 +490,7 @@ func (d *DB) seedDashboardForms() error {
 			StatusNormalText:         "待建置",
 			StatusNeedsAttentionText: "待建置",
 			ProviderKey:              "placeholder",
-			DisplayOrder:             4,
+			DisplayOrder:             5,
 			Enabled:                  true,
 			FocusItems: models.DashboardFocusItems{
 				ActiveTitle:  "已建資料",
@@ -490,6 +549,25 @@ func (d *DB) seedFirewallRequests() error {
 		"", "AI PRO 管理系統", "開通", "常態性服務", "campus", "", "10.109.193.19/32",
 		"資料中心", "I", "10.109.233.61/32", "TCP 80,443,22", "2026/06/16", "2027/09/15",
 		"2026/06/10", "開通桌機至 AI PRO 管理系統主機連線", "機房:DC", "D-260610-1-1", "active")
+	return err
+}
+
+func (d *DB) seedAssetInventoryRecords() error {
+	var count int
+	if err := d.conn.QueryRow(`SELECT COUNT(*) FROM asset_inventory_records`).Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	_, err := d.conn.Exec(`INSERT INTO asset_inventory_records (
+		system_name,asset_code,asset_type,asset_name,vendor_name,is_core_asset,has_national_security_concern,
+		asset_description,quantity,manager_department,user_department,location,confidentiality,integrity,
+		availability,asset_value,protection_level,status
+	) VALUES
+		('辦公用桌上型電腦','ISMS-HW-F08','實體類','桌上型電腦','ASUS','否','否','否','1','推廣科/劉智漢','推廣科/劉智漢','行政大樓4102室','2','2','2','2','0','active'),
+		('全院個人學習時數管理系統API（開發區）','ISMS-SW-F02','軟體類','全院個人學習時數管理系統API（開發區）','','否','否','否','1','推廣科/劉智漢','全院及e等公務員平台','資訊服務處機房','1','1','1','1','0','active'),
+		('全院個人學習時數管理系統（正式區）','ISMS-SW-F03','軟體類','全院個人學習時數管理系統','','否','否','否','1','推廣科/劉智漢','全院','資訊服務處機房','1','1','1','1','0','active')`)
 	return err
 }
 
@@ -781,5 +859,79 @@ func (d *DB) UpdateFirewallRequest(r *models.FirewallRequest) error {
 
 func (d *DB) DeleteFirewallRequest(id int) error {
 	_, err := d.conn.Exec(`DELETE FROM firewall_requests WHERE id=?`, id)
+	return err
+}
+
+func (d *DB) ListAssetInventoryRecords() ([]models.AssetInventoryRecord, error) {
+	return d.ListAssetInventoryRecordsFiltered("", "all", "")
+}
+
+func (d *DB) ListAssetInventoryRecordsFiltered(keyword, status, assetType string) ([]models.AssetInventoryRecord, error) {
+	base := `SELECT id,system_name,asset_code,asset_type,asset_name,vendor_name,is_core_asset,has_national_security_concern,asset_description,quantity,os_config_baseline,browser_config_baseline,network_config_baseline,application_config_baseline,other_config_baseline,config_exception_code,manager_department,user_department,location,confidentiality,integrity,availability,asset_value,legal_compliance,protection_level,mtpd,rto,rpo,status,creator,remarks,created_at,updated_at FROM asset_inventory_records`
+	clauses := []string{}
+	args := []interface{}{}
+	if strings.TrimSpace(status) != "" && status != "all" {
+		clauses = append(clauses, "status = ?")
+		args = append(args, status)
+	}
+	if strings.TrimSpace(assetType) != "" && assetType != "all" {
+		clauses = append(clauses, "asset_type = ?")
+		args = append(args, assetType)
+	}
+	if strings.TrimSpace(keyword) != "" {
+		like := "%" + strings.TrimSpace(keyword) + "%"
+		clauses = append(clauses, "(system_name LIKE ? OR asset_code LIKE ? OR asset_name LIKE ? OR manager_department LIKE ? OR user_department LIKE ? OR location LIKE ?)")
+		args = append(args, like, like, like, like, like, like)
+	}
+	query := base
+	if len(clauses) > 0 {
+		query += " WHERE " + strings.Join(clauses, " AND ")
+	}
+	query += " ORDER BY id DESC"
+	rows, err := d.conn.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []models.AssetInventoryRecord
+	for rows.Next() {
+		var r models.AssetInventoryRecord
+		if err := rows.Scan(&r.ID, &r.SystemName, &r.AssetCode, &r.AssetType, &r.AssetName, &r.VendorName, &r.IsCoreAsset, &r.HasNationalSecurityConcern, &r.AssetDescription, &r.Quantity, &r.OsConfigBaseline, &r.BrowserConfigBaseline, &r.NetworkConfigBaseline, &r.ApplicationConfigBaseline, &r.OtherConfigBaseline, &r.ConfigExceptionCode, &r.ManagerDepartment, &r.UserDepartment, &r.Location, &r.Confidentiality, &r.Integrity, &r.Availability, &r.AssetValue, &r.LegalCompliance, &r.ProtectionLevel, &r.Mtpd, &r.Rto, &r.Rpo, &r.Status, &r.Creator, &r.Remarks, &r.CreatedAt, &r.UpdatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, r)
+	}
+	if list == nil {
+		list = []models.AssetInventoryRecord{}
+	}
+	return list, nil
+}
+
+func (d *DB) GetAssetInventoryRecord(id int) (*models.AssetInventoryRecord, error) {
+	row := d.conn.QueryRow(`SELECT id,system_name,asset_code,asset_type,asset_name,vendor_name,is_core_asset,has_national_security_concern,asset_description,quantity,os_config_baseline,browser_config_baseline,network_config_baseline,application_config_baseline,other_config_baseline,config_exception_code,manager_department,user_department,location,confidentiality,integrity,availability,asset_value,legal_compliance,protection_level,mtpd,rto,rpo,status,creator,remarks,created_at,updated_at FROM asset_inventory_records WHERE id=?`, id)
+	var r models.AssetInventoryRecord
+	if err := row.Scan(&r.ID, &r.SystemName, &r.AssetCode, &r.AssetType, &r.AssetName, &r.VendorName, &r.IsCoreAsset, &r.HasNationalSecurityConcern, &r.AssetDescription, &r.Quantity, &r.OsConfigBaseline, &r.BrowserConfigBaseline, &r.NetworkConfigBaseline, &r.ApplicationConfigBaseline, &r.OtherConfigBaseline, &r.ConfigExceptionCode, &r.ManagerDepartment, &r.UserDepartment, &r.Location, &r.Confidentiality, &r.Integrity, &r.Availability, &r.AssetValue, &r.LegalCompliance, &r.ProtectionLevel, &r.Mtpd, &r.Rto, &r.Rpo, &r.Status, &r.Creator, &r.Remarks, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+func (d *DB) CreateAssetInventoryRecord(r *models.AssetInventoryRecord) (int64, error) {
+	res, err := d.conn.Exec(`INSERT INTO asset_inventory_records (system_name,asset_code,asset_type,asset_name,vendor_name,is_core_asset,has_national_security_concern,asset_description,quantity,os_config_baseline,browser_config_baseline,network_config_baseline,application_config_baseline,other_config_baseline,config_exception_code,manager_department,user_department,location,confidentiality,integrity,availability,asset_value,legal_compliance,protection_level,mtpd,rto,rpo,status,creator,remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		r.SystemName, r.AssetCode, r.AssetType, r.AssetName, r.VendorName, r.IsCoreAsset, r.HasNationalSecurityConcern, r.AssetDescription, r.Quantity, r.OsConfigBaseline, r.BrowserConfigBaseline, r.NetworkConfigBaseline, r.ApplicationConfigBaseline, r.OtherConfigBaseline, r.ConfigExceptionCode, r.ManagerDepartment, r.UserDepartment, r.Location, r.Confidentiality, r.Integrity, r.Availability, r.AssetValue, r.LegalCompliance, r.ProtectionLevel, r.Mtpd, r.Rto, r.Rpo, r.Status, r.Creator, r.Remarks)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func (d *DB) UpdateAssetInventoryRecord(r *models.AssetInventoryRecord) error {
+	_, err := d.conn.Exec(`UPDATE asset_inventory_records SET system_name=?,asset_code=?,asset_type=?,asset_name=?,vendor_name=?,is_core_asset=?,has_national_security_concern=?,asset_description=?,quantity=?,os_config_baseline=?,browser_config_baseline=?,network_config_baseline=?,application_config_baseline=?,other_config_baseline=?,config_exception_code=?,manager_department=?,user_department=?,location=?,confidentiality=?,integrity=?,availability=?,asset_value=?,legal_compliance=?,protection_level=?,mtpd=?,rto=?,rpo=?,status=?,creator=?,remarks=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+		r.SystemName, r.AssetCode, r.AssetType, r.AssetName, r.VendorName, r.IsCoreAsset, r.HasNationalSecurityConcern, r.AssetDescription, r.Quantity, r.OsConfigBaseline, r.BrowserConfigBaseline, r.NetworkConfigBaseline, r.ApplicationConfigBaseline, r.OtherConfigBaseline, r.ConfigExceptionCode, r.ManagerDepartment, r.UserDepartment, r.Location, r.Confidentiality, r.Integrity, r.Availability, r.AssetValue, r.LegalCompliance, r.ProtectionLevel, r.Mtpd, r.Rto, r.Rpo, r.Status, r.Creator, r.Remarks, r.ID)
+	return err
+}
+
+func (d *DB) DeleteAssetInventoryRecord(id int) error {
+	_, err := d.conn.Exec(`DELETE FROM asset_inventory_records WHERE id=?`, id)
 	return err
 }

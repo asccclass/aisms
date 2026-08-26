@@ -342,6 +342,9 @@
       <button class="nav-item" onclick="showPage('firewall-requests', event)">
         <span class="icon">🔥</span> 04-042防火牆申請
       </button>
+      <button class="nav-item" onclick="showPage('asset-inventory', event)">
+        <span class="icon">📦</span> 04-008資訊資產清冊
+      </button>
       <button class="nav-item" onclick="showPage('accounts', event)">
         <span class="icon">👤</span> 04-062特殊權限帳號管理
       </button>
@@ -433,6 +436,61 @@
             </tr>
           </thead>
           <tbody id="accounts-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="page" id="page-asset-inventory">
+      <div class="topbar">
+        <h2>📦 04-008資訊資產清冊</h2>
+        <div class="topbar-actions">
+          <div class="user-profile" id="user-profile-asset-inventory"></div>
+          <input type="file" id="asset-import-file" accept=".xlsx,.xlsm,.xltx,.xltm" style="display:none" onchange="importAssetInventoryXlsx(this)">
+          <button class="btn btn-ghost" onclick="triggerAssetInventoryImport()">⬆ 匯入 Excel</button>
+          <button class="btn btn-ghost" onclick="downloadAssetInventoryXlsx()">⬇ 匯出 Excel</button>
+          <button class="btn btn-ghost" onclick="downloadAssetInventoryDocx()">📝 匯出 DOCX</button>
+          <button class="btn btn-ghost" onclick="downloadAssetInventoryPdf()">📄 匯出 PDF</button>
+          <button class="btn btn-primary" onclick="openAssetInventoryCreate()">＋ 新增資產</button>
+        </div>
+      </div>
+      <div class="panel" style="margin-bottom:16px;">
+        <h3>資產主檔管理</h3>
+        <p class="panel-desc">依 Excel 主表建立欄位，涵蓋資產基本資料、組態管理、CIA 價值與營運關鍵指標。</p>
+      </div>
+      <div class="toolbar">
+        <input type="text" class="search-box" id="asset-search-input" placeholder="🔍 搜尋系統名稱、資產編號、資產名稱、部門、位置…" oninput="debounceAssetInventorySearch()">
+        <select class="filter-select" id="asset-status-filter" onchange="loadAssetInventory()">
+          <option value="all">全部狀態</option>
+          <option value="active">使用中</option>
+          <option value="pending">待補資料</option>
+          <option value="closed">已下架</option>
+        </select>
+        <select class="filter-select" id="asset-type-filter" onchange="loadAssetInventory()">
+          <option value="all">全部類別</option>
+          <option value="實體類">實體類</option>
+          <option value="軟體類">軟體類</option>
+          <option value="文件類">文件類</option>
+          <option value="服務類">服務類</option>
+          <option value="人員類">人員類</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#ID</th>
+              <th>系統 / 編號</th>
+              <th>資產類別 / 名稱</th>
+              <th>管理者 / 使用者</th>
+              <th>存放位置</th>
+              <th>C / I / A</th>
+              <th>價值 / 防護等級</th>
+              <th>數量</th>
+              <th>狀態</th>
+              <th width="120">操作</th>
+            </tr>
+          </thead>
+          <tbody id="asset-inventory-body"></tbody>
         </table>
       </div>
     </div>
@@ -567,8 +625,10 @@
 <div id="feature-platform-request-modal-root"></div>
 <div id="feature-platform-request-export-root"></div>
 <div id="feature-firewall-request-modal-root"></div>
+<div id="feature-asset-inventory-modal-root"></div>
 <script src="/js/common.js"></script>
 <script src="/js/dashboard.js"></script>
+<script src="/js/asset-inventory.js"></script>
 <script src="/js/accounts.js"></script>
 <script src="/js/platform-requests.js"></script>
 <script src="/js/firewall-requests.js"></script>

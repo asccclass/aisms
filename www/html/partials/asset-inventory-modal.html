@@ -1,0 +1,40 @@
+<div class="modal-overlay" id="asset-inventory-modal">
+  <div class="modal" style="width: 1080px; max-width: 97vw;">
+    <h3 id="asset-inventory-modal-title">新增資訊資產</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>資通系統名稱</label><input id="ai-system_name" class="form-control"></div>
+      <div class="form-group"><label>資產編號</label><input id="ai-asset_code" class="form-control"></div>
+      <div class="form-group"><label>資產類別</label><select id="ai-asset_type" class="form-control"><option value="實體類">實體類</option><option value="軟體類">軟體類</option><option value="文件類">文件類</option><option value="服務類">服務類</option><option value="人員類">人員類</option></select></div>
+      <div class="form-group"><label>資產名稱</label><input id="ai-asset_name" class="form-control"></div>
+      <div class="form-group full"><label>廠牌/廠商</label><input id="ai-vendor_name" class="form-control"></div>
+      <div class="form-group"><label>核心系統相關資產</label><select id="ai-is_core_asset" class="form-control"><option value="否">否</option><option value="是">是</option></select></div>
+      <div class="form-group"><label>具國安疑慮</label><select id="ai-has_national_security_concern" class="form-control"><option value="否">否</option><option value="是">是</option></select></div>
+      <div class="form-group full"><label>資產說明</label><textarea id="ai-asset_description" class="form-control" rows="2"></textarea></div>
+      <div class="form-group"><label>數量</label><input id="ai-quantity" class="form-control" value="1"></div>
+      <div class="form-group"><label>狀態</label><select id="ai-status" class="form-control"><option value="active">使用中</option><option value="pending">待補資料</option><option value="closed">已下架</option></select></div>
+      <div class="form-group"><label>OS 組態基準編號</label><input id="ai-os_config_baseline" class="form-control"></div>
+      <div class="form-group"><label>瀏覽器組態基準編號</label><input id="ai-browser_config_baseline" class="form-control"></div>
+      <div class="form-group"><label>網通設備組態基準編號</label><input id="ai-network_config_baseline" class="form-control"></div>
+      <div class="form-group"><label>應用程式組態基準編號</label><input id="ai-application_config_baseline" class="form-control"></div>
+      <div class="form-group"><label>其他組態基準編號</label><input id="ai-other_config_baseline" class="form-control"></div>
+      <div class="form-group"><label>組態例外編號</label><input id="ai-config_exception_code" class="form-control"></div>
+      <div class="form-group"><label>管理者(部門)</label><input id="ai-manager_department" class="form-control"></div>
+      <div class="form-group"><label>使用者(部門)</label><input id="ai-user_department" class="form-control"></div>
+      <div class="form-group full"><label>存放位置</label><input id="ai-location" class="form-control"></div>
+      <div class="form-group"><label>機密性(A)</label><input id="ai-confidentiality" class="form-control"></div>
+      <div class="form-group"><label>完整性(B)</label><input id="ai-integrity" class="form-control"></div>
+      <div class="form-group"><label>可用性(C)</label><input id="ai-availability" class="form-control"></div>
+      <div class="form-group"><label>資產價值 MAX(ABC)</label><input id="ai-asset_value" class="form-control"></div>
+      <div class="form-group"><label>法律遵循性(D)</label><input id="ai-legal_compliance" class="form-control"></div>
+      <div class="form-group"><label>防護等級 MAX(ABCD)</label><input id="ai-protection_level" class="form-control"></div>
+      <div class="form-group"><label>MTPD</label><input id="ai-mtpd" class="form-control"></div>
+      <div class="form-group"><label>RTO</label><input id="ai-rto" class="form-control"></div>
+      <div class="form-group"><label>RPO</label><input id="ai-rpo" class="form-control"></div>
+      <div class="form-group full"><label>備註</label><textarea id="ai-remarks" class="form-control" rows="2"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('asset-inventory-modal')">取消</button>
+      <button class="btn btn-primary" onclick="saveAssetInventory()">儲存</button>
+    </div>
+  </div>
+</div>
