@@ -437,6 +437,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 401, map[string]string{"error": "Unauthorized"})
 		return
 	}
+	email := decodeCookieValue(emailCookie.Value)
 
 	cookieValue := func(name string) string {
 		c, err := r.Cookie(name)
@@ -457,11 +458,11 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	hostedDomain := cookieValue("admin_hd")
 	if profile.Department == "" || profile.Title == "" || profile.OrganizationName == "" || profile.OrgUnitPath == "" || profile.DepartmentSource == "" || profile.DepartmentSource == "hd" {
 		resolvedProfile := workspaceResolver().Resolve(context.Background(), workspaceprofile.UserIdentity{
-			Email: emailCookie.Value,
+			Email: email,
 			HD:    hostedDomain,
 		})
 		enriched := buildSessionUserProfile(googleUserInfo{
-			Email: emailCookie.Value,
+			Email: email,
 			HD:    hostedDomain,
 		}, resolvedProfile)
 
@@ -496,7 +497,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, 200, map[string]interface{}{
-		"email":             emailCookie.Value,
+		"email":             email,
 		"name":              cookieValue("admin_name"),
 		"given_name":        cookieValue("admin_given_name"),
 		"family_name":       cookieValue("admin_family_name"),
@@ -505,7 +506,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		"google_id":         cookieValue("admin_google_id"),
 		"locale":            cookieValue("admin_locale"),
 		"verified_email":    cookieValue("admin_verified_email") == "true",
-		"email_domain":      emailDomain(emailCookie.Value),
+		"email_domain":      emailDomain(email),
 		"department":        profile.Department,
 		"department_source": profile.DepartmentSource,
 		"department_note":   profile.DepartmentNote,
