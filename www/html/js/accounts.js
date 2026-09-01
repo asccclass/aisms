@@ -5,6 +5,25 @@ window.buildAccountQueryParams = function buildAccountQueryParams(status, q) {
   return params;
 };
 
+window.accountCreatorBackfillAttempted = false;
+
+window.tryBackfillAccountCreators = async function tryBackfillAccountCreators(status, q) {
+  if (window.accountCreatorBackfillAttempted) return false;
+  if (status !== 'all' || q) return false;
+  window.accountCreatorBackfillAttempted = true;
+  const r = await fetch(API + '/api/creator-backfill', { method: 'POST' });
+  const data = await r.json();
+  if (!r.ok) {
+    toast('舊資料歸屬修補失敗', 'error');
+    return false;
+  }
+  if ((data.privileged_accounts || 0) > 0) {
+    toast(`已修補 ${data.privileged_accounts} 筆 04-062 舊資料歸屬`, 'success');
+    return true;
+  }
+  return false;
+};
+
 window.loadAccounts = async function loadAccounts() {
   const status = document.getElementById('status-filter').value;
   const q = document.getElementById('search-input').value.trim();
@@ -13,6 +32,9 @@ window.loadAccounts = async function loadAccounts() {
   if ([...params].length) url += '?' + params;
   const r = await fetch(url);
   accounts = await r.json();
+  if ((!accounts || !accounts.length) && await tryBackfillAccountCreators(status, q)) {
+    return loadAccounts();
+  }
   renderAccounts(accounts);
 };
 
@@ -26,7 +48,7 @@ window.renderAccounts = function renderAccounts(list) {
     <tr>
       <td style="color:var(--text-muted);font-size:12px;">#${a.id}</td>
       <td>${esc(a.system_name)}<br><span style="font-size:12px;color:var(--text-muted);">${esc(a.environment)}</span></td>
-      <td>${esc(a.ip_address)}<br><span style="font-size:12px;color:var(--text-muted);">${esc(a.inventory_date)}</span></td>
+      <td>${esc(a.ip_address)}<br><span style="font-size:12px;color:var(--text-muted);">${esc(formatDate(a.inventory_date))}</span></td>
       <td>${esc(a.department)}<br><span style="font-size:12px;color:var(--text-muted);">${esc(a.department_code)}</span></td>
       <td><strong>${esc(a.account_name)}</strong><br>${accountTypeBadge(a.account_type)}</td>
       <td>${esc(a.owner_name)}<br><span style="font-size:12px;color:var(--text-muted);">${esc(a.email)}</span></td>
@@ -68,7 +90,8 @@ window.openCreate = async function openCreate() {
   editingId = null;
   document.getElementById('modal-title').textContent = '新增特殊權限帳號';
   clearForm();
-  document.getElementById('f-inventory_date').value = new Date().toISOString().slice(0,10).replace(/-/g,'');
+  initDateInputs(document.getElementById('account-modal'));
+  document.getElementById('f-inventory_date').value = todayDateInputValue();
   applyCurrentUserToAccountForm();
   setModalSnapshotSource('account-modal', getAccountFormSnapshot);
   captureModalBaseline('account-modal');
@@ -82,6 +105,7 @@ window.openEdit = async function openEdit(id) {
   document.getElementById('modal-title').textContent = '編輯帳號 #' + id;
   const r = await fetch(API + '/api/accounts/' + id);
   fillForm(await r.json());
+  initDateInputs(document.getElementById('account-modal'));
   setModalSnapshotSource('account-modal', getAccountFormSnapshot);
   captureModalBaseline('account-modal');
   document.getElementById('account-modal').classList.add('open');
@@ -90,7 +114,7 @@ window.openEdit = async function openEdit(id) {
 window.fillForm = function fillForm(a) {
   ['system_name','environment','ip_address','inventory_date','account_name','account_type','department','department_code','owner_name','email','passphrase_rotate','status','remarks'].forEach(f => {
     const el = document.getElementById('f-' + f);
-    if (el) el.value = a[f] || '';
+    if (el) el.value = f === 'inventory_date' ? normalizeDateValue(a[f] || '') : (a[f] || '');
   });
 };
 
@@ -187,5 +211,5 @@ window.loadLogs = async function loadLogs() {
     tbody.innerHTML = `<tr><td colspan="7"><div class="empty"><div class="icon">📭</div><p>尚無通知記錄</p></div></td></tr>`;
     return;
   }
-  tbody.innerHTML = logs.map(l => `<tr><td>${l.id}</td><td>${l.account_id}</td><td>${esc(l.account_name)}</td><td>${esc(l.email)}</td><td style="font-size:12px;">${new Date(l.sent_at).toLocaleString('zh-TW')}</td><td><span class="log-status-${l.status}">${l.status === 'sent' ? '✅ 成功' : '❌ 失敗'}</span></td><td style="font-size:12px;color:var(--text-muted);">${esc(l.message)}</td></tr>`).join('');
+  tbody.innerHTML = logs.map(l => `<tr><td>${l.id}</td><td>${l.account_id}</td><td>${esc(l.account_name)}</td><td>${esc(l.email)}</td><td style="font-size:12px;">${esc(formatDateTime(l.sent_at))}</td><td><span class="log-status-${l.status}">${l.status === 'sent' ? '✅ 成功' : '❌ 失敗'}</span></td><td style="font-size:12px;color:var(--text-muted);">${esc(l.message)}</td></tr>`).join('');
 };
