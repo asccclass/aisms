@@ -19,12 +19,13 @@ window.formEditingId = null;
 window.notifyId = null;
 window.deleteId = null;
 window.searchTimer = null;
-window.profileTargets = ['user-profile-dash', 'user-profile-acc', 'user-profile-forms', 'user-profile-platform', 'user-profile-firewall', 'user-profile-asset-inventory'];
+window.profileTargets = ['user-profile-dash', 'user-profile-acc', 'user-profile-forms', 'user-profile-platform', 'user-profile-firewall', 'user-profile-asset-inventory', 'user-profile-protection-baseline'];
 window.profileExpanded = false;
 window.currentUserProfile = null;
 window.modalSnapshotGetters = {};
 window.modalSnapshotBaselines = {};
 window.confirmState = null;
+window.pageInit = window.pageInit || null;
 
 window.normalizeDashboardForm = function normalizeDashboardForm(form) {
   return {
@@ -51,9 +52,11 @@ window.showPage = function showPage(name, evt) {
   if (name === 'asset-inventory') loadAssetInventory();
   if (name === 'accounts') loadAccounts();
   if (name === 'firewall-requests') loadFirewallRequests();
+  if (name === 'protection-baselines') loadProtectionBaselines();
   if (name === 'platform-requests') loadPlatformRequests();
   if (name === 'forms') loadFormsManagement();
   if (name === 'notifications') loadLogs();
+  if (name === 'operation-logs') loadOperationLogs();
 };
 
 window.toast = function toast(msg, type = '') {
@@ -142,12 +145,17 @@ window.accountTypeBadge = function accountTypeBadge(t) {
 
 window.formatDate = function formatDate(d) {
   if (!d) return '—';
-  return new Date(d).toLocaleDateString('zh-TW');
+  return normalizeDateValue(d) || '—';
 };
 
 window.formatDateTime = function formatDateTime(d) {
   if (!d) return '—';
-  return new Date(d).toLocaleString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const parsed = new Date(d);
+  if (Number.isNaN(parsed.getTime())) return String(d);
+  const date = normalizeDateValue(parsed);
+  const hours = String(parsed.getHours()).padStart(2, '0');
+  const minutes = String(parsed.getMinutes()).padStart(2, '0');
+  return `${date} ${hours}:${minutes}`;
 };
 
 window.countByStatus = function countByStatus(list, status) {
@@ -164,6 +172,40 @@ window.esc = function esc(s) {
 
 window.escAttr = function escAttr(s) {
   return esc(s).replace(/'/g, '&#39;');
+};
+
+window.normalizeDateValue = function normalizeDateValue(value) {
+  if (!value) return '';
+  const text = String(value).trim();
+  if (!text) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  if (/^\d{8}$/.test(text)) return `${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}`;
+  if (/^\d{4}\/\d{2}\/\d{2}$/.test(text)) return text.replace(/\//g, '-');
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) return text;
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+window.todayDateInputValue = function todayDateInputValue() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+window.initDateInputs = function initDateInputs(root = document) {
+  root.querySelectorAll('input[data-date-input]').forEach(input => {
+    input.type = 'date';
+    input.placeholder = 'yyyy-mm-dd';
+    input.value = normalizeDateValue(input.value);
+    input.addEventListener('change', () => {
+      input.value = normalizeDateValue(input.value);
+    });
+  });
 };
 
 window.toggleUserProfile = function toggleUserProfile() {
@@ -223,7 +265,13 @@ window.checkLogin = async function checkLogin() {
       el.onclick = toggleUserProfile;
     }
   });
-  await loadDashboardPage();
+  if (typeof window.pageInit === 'function') {
+    await window.pageInit();
+    return;
+  }
+  if (document.getElementById('page-dashboard') && typeof window.loadDashboardPage === 'function') {
+    await loadDashboardPage();
+  }
 };
 
 window.logout = async function logout() {
@@ -239,5 +287,6 @@ window.closeConfirm = function closeConfirm() {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
+  initDateInputs();
   checkLogin();
 });

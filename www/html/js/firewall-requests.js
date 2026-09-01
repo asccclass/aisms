@@ -26,10 +26,6 @@
     return true;
   }
 
-  function todaySlash() {
-    return new Date().toLocaleDateString('sv-SE').replace(/-/g, '/');
-  }
-
   function getFirewallRequestFormSnapshot() {
     const snapshot = {};
     fields.forEach(field => {
@@ -59,7 +55,7 @@
         <td>${esc(item.source_zone)}${item.source_zone2 ? ' / ' + esc(item.source_zone2) : ''}<br><span class="hint mono">${esc(item.source_ip)}</span></td>
         <td>${esc(item.destination_zone)}${item.destination_zone2 ? ' / ' + esc(item.destination_zone2) : ''}<br><span class="hint mono">${esc(item.destination_ip)}</span></td>
         <td>${esc(item.protocol_type)}</td>
-        <td>${esc(item.start_date)}<br><span class="hint">${esc(item.end_date)}</span></td>
+        <td>${esc(formatDate(item.start_date))}<br><span class="hint">${esc(formatDate(item.end_date))}</span></td>
         <td>${esc(item.firewall_zone)}<br><span class="hint mono">${esc(item.firewall_id)}</span></td>
         <td>${statusBadge(item.status)}</td>
         <td><div class="actions"><button class="btn btn-ghost btn-sm" onclick="openFirewallRequestEdit(${item.id})">✏️</button><button class="btn btn-danger btn-sm" onclick="confirmDeleteFirewallRequest(${item.id}, '${escAttr(item.system_name)}')">🗑️</button></div></td>
@@ -72,7 +68,8 @@
     firewallRequestEditingId = null;
     document.getElementById('firewall-request-modal-title').textContent = '新增防火牆申請';
     clearFirewallRequestForm();
-    document.getElementById('fr-request_date').value = todaySlash();
+    initDateInputs(document.getElementById('firewall-request-modal'));
+    document.getElementById('fr-request_date').value = todayDateInputValue();
     setModalSnapshotSource('firewall-request-modal', getFirewallRequestFormSnapshot);
     captureModalBaseline('firewall-request-modal');
     document.getElementById('firewall-request-modal').classList.add('open');
@@ -86,6 +83,7 @@
     const r = await fetch(API + '/api/firewall-requests/' + id);
     const data = await r.json();
     fillFirewallRequestForm(data);
+    initDateInputs(document.getElementById('firewall-request-modal'));
     setModalSnapshotSource('firewall-request-modal', getFirewallRequestFormSnapshot);
     captureModalBaseline('firewall-request-modal');
     document.getElementById('firewall-request-modal').classList.add('open');
@@ -104,7 +102,7 @@
   window.fillFirewallRequestForm = function fillFirewallRequestForm(item) {
     fields.forEach(field => {
       const el = document.getElementById('fr-' + field);
-      if (el) el.value = item[field] || '';
+      if (el) el.value = ['start_date', 'end_date', 'request_date'].includes(field) ? normalizeDateValue(item[field] || '') : (item[field] || '');
     });
     const display = document.getElementById('fr-id_display');
     if (display) display.value = item.id || '';

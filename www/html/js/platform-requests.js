@@ -93,10 +93,6 @@
     }
   }
 
-  function todayYmd() {
-    return new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  }
-
   function getPlatformRequestFormSnapshot() {
     const snapshot = {};
     fields.forEach(field => {
@@ -123,9 +119,9 @@
         <td style="color:var(--text-muted);font-size:12px;">#${item.id}</td>
         <td>${esc(item.system_name)}<br><span class="hint">${esc(item.system_alias || item.environment_type)}</span></td>
         <td>${esc(item.applicant_name)}<br><span class="hint">${esc(item.applicant_department)}</span></td>
-        <td>${esc(item.request_type)}<br><span class="hint">${esc(item.request_date)}</span></td>
+        <td>${esc(item.request_type)}<br><span class="hint">${esc(formatDate(item.request_date))}</span></td>
         <td>${esc(item.operating_system)}<br><span class="hint">${esc(item.disk_size)}</span></td>
-        <td>${esc(item.request_start_date)}<br><span class="hint">${esc(item.request_end_date)}</span></td>
+        <td>${esc(formatDate(item.request_start_date))}<br><span class="hint">${esc(formatDate(item.request_end_date))}</span></td>
         <td>${esc(item.email)}</td>
         <td>${statusBadge(item.status)}</td>
         <td><div class="actions"><button class="btn btn-ghost btn-sm" onclick="openPlatformRequestExport(${item.id})">⬇</button><button class="btn btn-ghost btn-sm" onclick="openPlatformRequestEdit(${item.id})">✏️</button><button class="btn btn-danger btn-sm" onclick="confirmDeletePlatformRequest(${item.id}, '${escAttr(item.system_name)}')">🗑️</button></div></td>
@@ -178,7 +174,8 @@
     platformRequestEditingId = null;
     document.getElementById('platform-request-modal-title').textContent = '新增系統平台申請';
     clearPlatformRequestForm();
-    document.getElementById('pr-request_date').value = todayYmd();
+    initDateInputs(document.getElementById('platform-request-modal'));
+    document.getElementById('pr-request_date').value = todayDateInputValue();
     applyCurrentUserToPlatformRequestForm();
     setModalSnapshotSource('platform-request-modal', getPlatformRequestFormSnapshot);
     captureModalBaseline('platform-request-modal');
@@ -193,6 +190,7 @@
     const r = await fetch(API + '/api/platform-requests/' + id);
     const data = await r.json();
     fillPlatformRequestForm(data);
+    initDateInputs(document.getElementById('platform-request-modal'));
     setModalSnapshotSource('platform-request-modal', getPlatformRequestFormSnapshot);
     captureModalBaseline('platform-request-modal');
     document.getElementById('platform-request-modal').classList.add('open');
@@ -214,7 +212,7 @@
   window.fillPlatformRequestForm = function fillPlatformRequestForm(item) {
     fields.forEach(field => {
       const el = document.getElementById('pr-' + field);
-      if (el) el.value = item[field] || '';
+      if (el) el.value = ['request_date', 'request_start_date', 'request_end_date'].includes(field) ? normalizeDateValue(item[field] || '') : (item[field] || '');
     });
   };
 

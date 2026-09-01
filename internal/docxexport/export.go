@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
+	"isms-privilege/internal/datefmt"
 	"io"
 	"isms-privilege/internal/models"
 	"os"
@@ -164,7 +165,7 @@ func buildAccountRowXML(a models.PrivilegedAccount) string {
 	return `<w:tr><w:trPr><w:cantSplit/><w:trHeight w:val="750"/></w:trPr>` +
 		dataCell("1958", a.SystemName, "center") +
 		dataCell("2105", a.IPAddress, "center") +
-		dataCell("1545", a.InventoryDate, "center") +
+		dataCell("1545", datefmt.NormalizeDate(a.InventoryDate), "center") +
 		dataCell("1541", a.AccountName, "center") +
 		dataCell("1393", a.AccountType, "center") +
 		dataCell("1486", unitOwner, "center") +

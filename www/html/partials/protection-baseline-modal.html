@@ -1,0 +1,41 @@
+<div class="modal-overlay" id="protection-baseline-modal">
+  <div class="modal" style="width: 1400px; max-width: 98vw;">
+    <h3 id="protection-baseline-modal-title">新增 04-069 資料</h3>
+    <div class="form-grid">
+      <div class="form-group"><label>系統名稱</label><input id="pb-system_name" class="form-control"></div>
+      <div class="form-group"><label>系統安全等級</label><select id="pb-security_level" class="form-control"><option value="普">普</option><option value="中">中</option><option value="高">高</option></select></div>
+      <div class="form-group"><label>填寫人</label><input id="pb-filled_by" class="form-control"></div>
+      <div class="form-group"><label>填表日期</label><input id="pb-form_date" class="form-control" data-date-input placeholder="yyyy-mm-dd"></div>
+      <div class="form-group"><label>審查人</label><input id="pb-reviewer" class="form-control"></div>
+      <div class="form-group"><label>審查日期</label><input id="pb-review_date" class="form-control" data-date-input placeholder="yyyy-mm-dd"></div>
+      <div class="form-group"><label>狀態</label><select id="pb-status" class="form-control"><option value="active">進行中</option><option value="pending">待補件</option><option value="closed">已完成</option></select></div>
+      <div class="form-group full"><label>備註</label><textarea id="pb-remarks" class="form-control" rows="2"></textarea></div>
+    </div>
+    <div class="panel" style="margin-top:16px; padding:16px;">
+      <h3 style="margin-bottom:8px;">控制措施明細</h3>
+      <p class="panel-desc" style="margin-bottom:12px;">新建資料時會自動帶入 04-069 標準 80 項控制措施，可逐筆填寫是否套用、執行說明與符合性。</p>
+      <div class="table-wrap" style="max-height:55vh; overflow:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>項次</th>
+              <th>構面 / 措施</th>
+              <th>等級</th>
+              <th>措施說明</th>
+              <th>是否套用</th>
+              <th>執行說明</th>
+              <th>符合性</th>
+              <th>缺失與改善</th>
+              <th>備註</th>
+            </tr>
+          </thead>
+          <tbody id="pb-controls-body"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('protection-baseline-modal')">取消</button>
+      <button class="btn btn-primary" onclick="saveProtectionBaseline()">儲存</button>
+    </div>
+  </div>
+</div>

@@ -2,6 +2,7 @@ package docxexport
 
 import (
 	"fmt"
+	"isms-privilege/internal/datefmt"
 	"isms-privilege/internal/models"
 	"strings"
 )
@@ -66,7 +67,7 @@ func buildPlatformRequestTableXML(req models.SystemPlatformRequest) string {
 	return `<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblBorders><w:top w:val="single" w:sz="8" w:space="0" w:color="auto"/><w:left w:val="single" w:sz="8" w:space="0" w:color="auto"/><w:bottom w:val="single" w:sz="8" w:space="0" w:color="auto"/><w:right w:val="single" w:sz="8" w:space="0" w:color="auto"/><w:insideH w:val="single" w:sz="6" w:space="0" w:color="auto"/><w:insideV w:val="single" w:sz="6" w:space="0" w:color="auto"/></w:tblBorders><w:tblCellMar><w:top w:w="80" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="1800"/><w:gridCol w:w="2600"/><w:gridCol w:w="1800"/><w:gridCol w:w="2600"/><w:gridCol w:w="1800"/><w:gridCol w:w="2600"/></w:tblGrid>` +
 		tableRowXML(
 			labelCell("填表日期", 1),
-			valueCell(formatROCDate(req.RequestDate), 5),
+			valueCell(datefmt.NormalizeDate(req.RequestDate), 5),
 		) +
 		tableRowXML(
 			labelCell("申請人", 1),
@@ -102,7 +103,7 @@ func buildPlatformRequestTableXML(req models.SystemPlatformRequest) string {
 		) +
 		tableRowXML(
 			labelCell("申請期間", 1),
-			valueCell(strings.TrimSpace(req.RequestStartDate+" 至 "+req.RequestEndDate), 5),
+			valueCell(strings.TrimSpace(datefmt.NormalizeDate(req.RequestStartDate)+" 至 "+datefmt.NormalizeDate(req.RequestEndDate)), 5),
 		) +
 		tableRowXML(
 			labelCell("申請樣態", 1),
@@ -251,17 +252,6 @@ func joinLines(lines ...string) string {
 		}
 	}
 	return strings.Join(filtered, "\n")
-}
-
-func formatROCDate(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ""
-	}
-	if len(raw) == 8 && !strings.Contains(raw, "-") {
-		return raw[:4] + "-" + raw[4:6] + "-" + raw[6:]
-	}
-	return raw
 }
 
 func buildRequestTypeText(req models.SystemPlatformRequest) string {

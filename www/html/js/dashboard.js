@@ -109,7 +109,7 @@ window.renderDashboardRecentList = function renderDashboardRecentList(form, list
       <span style="color:var(--text-muted);width:28px;">#${a.id}</span>
       <div class="dashboard-row-main">
         <div class="dashboard-row-title">${esc(a.primary_name)} ${statusBadge(a.status)}</div>
-        <div class="dashboard-row-meta">${esc(a.secondary_name) || '未分類'}<br>使用者：${esc(a.owner_name) || '未填寫'} ｜ 盤點日：${esc(a.inventory_date) || '未填寫'} ｜ 更新：${formatDateTime(a.updated_at || a.created_at)}</div>
+        <div class="dashboard-row-meta">${esc(a.secondary_name) || '未分類'}<br>使用者：${esc(a.owner_name) || '未填寫'} ｜ 盤點日：${esc(formatDate(a.inventory_date))} ｜ 更新：${formatDateTime(a.updated_at || a.created_at)}</div>
       </div>
     </div>`).join('');
   document.getElementById('dashboard-detail-title').textContent = `${form.short_code} ${form.detail_title}`;

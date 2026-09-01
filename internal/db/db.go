@@ -15,6 +15,10 @@ type DB struct {
 	conn *sql.DB
 }
 
+type creatorBackfillTarget struct {
+	table string
+}
+
 // New 建立資料庫連線並初始化
 func New(path string) (*DB, error) {
 	conn, err := sql.Open("sqlite3", path+"?_foreign_keys=on")
@@ -61,6 +65,22 @@ func (d *DB) migrate() error {
 		sent_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		status       TEXT    NOT NULL DEFAULT 'sent',
 		message      TEXT    NOT NULL DEFAULT ''
+	);
+
+	CREATE TABLE IF NOT EXISTS operation_logs (
+		id             INTEGER PRIMARY KEY AUTOINCREMENT,
+		event_type     TEXT    NOT NULL DEFAULT '',
+		occurred_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		location       TEXT    NOT NULL DEFAULT '',
+		request_path   TEXT    NOT NULL DEFAULT '',
+		request_method TEXT    NOT NULL DEFAULT '',
+		status_code    INTEGER NOT NULL DEFAULT 200,
+		source_ip      TEXT    NOT NULL DEFAULT '',
+		user_agent     TEXT    NOT NULL DEFAULT '',
+		user_email     TEXT    NOT NULL DEFAULT '',
+		user_name      TEXT    NOT NULL DEFAULT '',
+		user_google_id TEXT    NOT NULL DEFAULT '',
+		department     TEXT    NOT NULL DEFAULT ''
 	);
 
 	CREATE TABLE IF NOT EXISTS dashboard_forms (
@@ -194,6 +214,37 @@ func (d *DB) migrate() error {
 		created_at                    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at                    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
+
+	CREATE TABLE IF NOT EXISTS protection_baseline_records (
+		id             INTEGER PRIMARY KEY AUTOINCREMENT,
+		system_name    TEXT    NOT NULL DEFAULT '',
+		security_level TEXT    NOT NULL DEFAULT '普',
+		filled_by      TEXT    NOT NULL DEFAULT '',
+		form_date      TEXT    NOT NULL DEFAULT '',
+		reviewer       TEXT    NOT NULL DEFAULT '',
+		review_date    TEXT    NOT NULL DEFAULT '',
+		status         TEXT    NOT NULL DEFAULT 'active',
+		creator        TEXT    NOT NULL DEFAULT '',
+		remarks        TEXT    NOT NULL DEFAULT '',
+		created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS protection_baseline_controls (
+		id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+		record_id            INTEGER NOT NULL REFERENCES protection_baseline_records(id) ON DELETE CASCADE,
+		item_no              INTEGER NOT NULL,
+		domain_name          TEXT    NOT NULL DEFAULT '',
+		control_category     TEXT    NOT NULL DEFAULT '',
+		requirement_level    TEXT    NOT NULL DEFAULT '',
+		control_description  TEXT    NOT NULL DEFAULT '',
+		measure_notes        TEXT    NOT NULL DEFAULT '',
+		applies              TEXT    NOT NULL DEFAULT '',
+		implementation_notes TEXT    NOT NULL DEFAULT '',
+		compliance           TEXT    NOT NULL DEFAULT '',
+		finding              TEXT    NOT NULL DEFAULT '',
+		remarks              TEXT    NOT NULL DEFAULT ''
+	);
 	`
 	_, err := d.conn.Exec(schema)
 	_, _ = d.conn.Exec(`ALTER TABLE privileged_accounts ADD COLUMN environment TEXT NOT NULL DEFAULT '正式區'`)
@@ -237,11 +288,23 @@ func (d *DB) seed() {
 // ---- CRUD ----
 
 func (d *DB) ListAccounts(status string) ([]models.PrivilegedAccount, error) {
+	return d.ListAccountsByCreator(status, "")
+}
+
+func (d *DB) ListAccountsByCreator(status, creator string) ([]models.PrivilegedAccount, error) {
 	q := `SELECT id,system_name,environment,ip_address,inventory_date,account_name,account_type,department_code,department,creator,owner_name,email,passphrase_rotate,status,remarks,created_at,updated_at,last_confirmed_at FROM privileged_accounts`
 	args := []interface{}{}
+	clauses := []string{}
 	if status != "" && status != "all" {
-		q += " WHERE status = ?"
+		clauses = append(clauses, "status = ?")
 		args = append(args, status)
+	}
+	if strings.TrimSpace(creator) != "" {
+		clauses = append(clauses, "creator = ?")
+		args = append(args, creator)
+	}
+	if len(clauses) > 0 {
+		q += " WHERE " + strings.Join(clauses, " AND ")
 	}
 	q += " ORDER BY id DESC"
 	rows, err := d.conn.Query(q, args...)
@@ -265,7 +328,17 @@ func (d *DB) ListAccounts(status string) ([]models.PrivilegedAccount, error) {
 }
 
 func (d *DB) GetAccount(id int) (*models.PrivilegedAccount, error) {
-	row := d.conn.QueryRow(`SELECT id,system_name,environment,ip_address,inventory_date,account_name,account_type,department_code,department,creator,owner_name,email,passphrase_rotate,status,remarks,created_at,updated_at,last_confirmed_at,confirm_token,token_expiry FROM privileged_accounts WHERE id=?`, id)
+	return d.GetAccountByCreator(id, "")
+}
+
+func (d *DB) GetAccountByCreator(id int, creator string) (*models.PrivilegedAccount, error) {
+	query := `SELECT id,system_name,environment,ip_address,inventory_date,account_name,account_type,department_code,department,creator,owner_name,email,passphrase_rotate,status,remarks,created_at,updated_at,last_confirmed_at,confirm_token,token_expiry FROM privileged_accounts WHERE id=?`
+	args := []interface{}{id}
+	if strings.TrimSpace(creator) != "" {
+		query += ` AND creator=?`
+		args = append(args, creator)
+	}
+	row := d.conn.QueryRow(query, args...)
 	var a models.PrivilegedAccount
 	var lc, te sql.NullTime
 	var tok sql.NullString
@@ -320,7 +393,17 @@ func (d *DB) UpdateAccount(a *models.PrivilegedAccount) error {
 }
 
 func (d *DB) DeleteAccount(id int) error {
-	_, err := d.conn.Exec(`DELETE FROM privileged_accounts WHERE id=?`, id)
+	return d.DeleteAccountByCreator(id, "")
+}
+
+func (d *DB) DeleteAccountByCreator(id int, creator string) error {
+	query := `DELETE FROM privileged_accounts WHERE id=?`
+	args := []interface{}{id}
+	if strings.TrimSpace(creator) != "" {
+		query += ` AND creator=?`
+		args = append(args, creator)
+	}
+	_, err := d.conn.Exec(query, args...)
 	return err
 }
 
@@ -348,8 +431,62 @@ func (d *DB) AddNotificationLog(log *models.NotificationLog) error {
 	return err
 }
 
+func (d *DB) AddOperationLog(log *models.OperationLog) error {
+	_, err := d.conn.Exec(`INSERT INTO operation_logs (event_type,location,request_path,request_method,status_code,source_ip,user_agent,user_email,user_name,user_google_id,department) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+		log.EventType, log.Location, log.RequestPath, log.RequestMethod, log.StatusCode, log.SourceIP, log.UserAgent, log.UserEmail, log.UserName, log.UserGoogleID, log.Department)
+	return err
+}
+
+func (d *DB) ListOperationLogs(limit int) ([]models.OperationLog, error) {
+	return d.ListOperationLogsByUser(limit, "")
+}
+
+func (d *DB) ListOperationLogsByUser(limit int, userEmail string) ([]models.OperationLog, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 200
+	}
+	query := `SELECT id,event_type,occurred_at,location,request_path,request_method,status_code,source_ip,user_agent,user_email,user_name,user_google_id,department FROM operation_logs`
+	args := []interface{}{}
+	if strings.TrimSpace(userEmail) != "" {
+		query += ` WHERE user_email = ?`
+		args = append(args, userEmail)
+	}
+	query += ` ORDER BY occurred_at DESC, id DESC LIMIT ?`
+	args = append(args, limit)
+	rows, err := d.conn.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []models.OperationLog
+	for rows.Next() {
+		var item models.OperationLog
+		if err := rows.Scan(&item.ID, &item.EventType, &item.OccurredAt, &item.Location, &item.RequestPath, &item.RequestMethod, &item.StatusCode, &item.SourceIP, &item.UserAgent, &item.UserEmail, &item.UserName, &item.UserGoogleID, &item.Department); err != nil {
+			return nil, err
+		}
+		list = append(list, item)
+	}
+	if list == nil {
+		list = []models.OperationLog{}
+	}
+	return list, nil
+}
+
 func (d *DB) ListNotificationLogs() ([]models.NotificationLog, error) {
-	rows, err := d.conn.Query(`SELECT id,account_id,account_name,email,sent_at,status,message FROM notification_logs ORDER BY sent_at DESC LIMIT 200`)
+	return d.ListNotificationLogsByCreator("")
+}
+
+func (d *DB) ListNotificationLogsByCreator(creator string) ([]models.NotificationLog, error) {
+	query := `SELECT l.id,l.account_id,l.account_name,l.email,l.sent_at,l.status,l.message
+		FROM notification_logs l
+		JOIN privileged_accounts a ON a.id = l.account_id`
+	args := []interface{}{}
+	if strings.TrimSpace(creator) != "" {
+		query += ` WHERE a.creator = ?`
+		args = append(args, creator)
+	}
+	query += ` ORDER BY l.sent_at DESC LIMIT 200`
+	rows, err := d.conn.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -365,8 +502,19 @@ func (d *DB) ListNotificationLogs() ([]models.NotificationLog, error) {
 
 // Stats 統計數字
 func (d *DB) Stats() (map[string]int, error) {
+	return d.StatsByCreator("")
+}
+
+func (d *DB) StatsByCreator(creator string) (map[string]int, error) {
 	stats := map[string]int{}
-	rows, err := d.conn.Query(`SELECT status, COUNT(*) FROM privileged_accounts GROUP BY status`)
+	query := `SELECT status, COUNT(*) FROM privileged_accounts`
+	args := []interface{}{}
+	if strings.TrimSpace(creator) != "" {
+		query += ` WHERE creator = ?`
+		args = append(args, creator)
+	}
+	query += ` GROUP BY status`
+	rows, err := d.conn.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -461,6 +609,27 @@ func (d *DB) seedDashboardForms() error {
 			},
 		},
 		{
+			Key:          "isms-04-069",
+			Code:         "ISMS-04-069",
+			ShortCode:    "04-069",
+			Name:         "資通系統防護基準執行說明表",
+			Description:  "管理系統安全等級與 80 項資通系統防護基準控制措施執行情形。",
+			DetailTitle:  "最近防護基準資料",
+			EmptyText:    "尚無 04-069 防護基準資料",
+			ProviderKey:  "protection_baselines",
+			DisplayOrder: 4,
+			Enabled:      true,
+			FocusItems: models.DashboardFocusItems{
+				ActiveTitle:  "進行中表單",
+				ActiveMeta:   "目前仍持續維護與評估中的 04-069 表單",
+				PendingTitle: "待補強事項",
+				PendingMeta:  "需補件、改善或待完成填寫的 04-069 表單",
+				ClosedTitle:  "已完成表單",
+				ClosedMeta:   "已完成審查或結案的 04-069 表單",
+				RecentTitle:  "最近更新表單",
+			},
+		},
+		{
 			Key:          "isms-04-078",
 			Code:         "ISMS-04-078",
 			ShortCode:    "04-078",
@@ -469,7 +638,7 @@ func (d *DB) seedDashboardForms() error {
 			DetailTitle:  "最近申請資料",
 			EmptyText:    "尚無系統平台申請資料",
 			ProviderKey:  "system_platform_requests",
-			DisplayOrder: 4,
+			DisplayOrder: 5,
 			Enabled:      true,
 			FocusItems: models.DashboardFocusItems{
 				ActiveTitle:  "進行中申請",
@@ -490,7 +659,7 @@ func (d *DB) seedDashboardForms() error {
 			StatusNormalText:         "待建置",
 			StatusNeedsAttentionText: "待建置",
 			ProviderKey:              "placeholder",
-			DisplayOrder:             5,
+			DisplayOrder:             6,
 			Enabled:                  true,
 			FocusItems: models.DashboardFocusItems{
 				ActiveTitle:  "已建資料",
@@ -679,11 +848,73 @@ func (d *DB) Close() error {
 	return d.conn.Close()
 }
 
+func (d *DB) BackfillEmptyCreators(userEmail string) (*models.CreatorBackfillResult, error) {
+	userEmail = strings.TrimSpace(userEmail)
+	if userEmail == "" {
+		return nil, fmt.Errorf("user email is required")
+	}
+
+	targets := []creatorBackfillTarget{
+		{table: "privileged_accounts"},
+		{table: "system_platform_requests"},
+		{table: "firewall_requests"},
+		{table: "asset_inventory_records"},
+		{table: "protection_baseline_records"},
+	}
+
+	tx, err := d.conn.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	result := &models.CreatorBackfillResult{}
+	for _, target := range targets {
+		res, err := tx.Exec(fmt.Sprintf(`UPDATE %s SET creator=?, updated_at=CURRENT_TIMESTAMP WHERE TRIM(COALESCE(creator, ''))=''`, target.table), userEmail)
+		if err != nil {
+			return nil, err
+		}
+		affected64, err := res.RowsAffected()
+		if err != nil {
+			return nil, err
+		}
+		affected := int(affected64)
+		result.TotalUpdated += affected
+		switch target.table {
+		case "privileged_accounts":
+			result.PrivilegedAccounts = affected
+		case "system_platform_requests":
+			result.SystemPlatforms = affected
+		case "firewall_requests":
+			result.FirewallRequests = affected
+		case "asset_inventory_records":
+			result.AssetInventory = affected
+		case "protection_baseline_records":
+			result.ProtectionBaselines = affected
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // SearchAccounts 搜尋
 func (d *DB) SearchAccounts(keyword string) ([]models.PrivilegedAccount, error) {
+	return d.SearchAccountsByCreator(keyword, "")
+}
+
+func (d *DB) SearchAccountsByCreator(keyword, creator string) ([]models.PrivilegedAccount, error) {
 	like := "%" + keyword + "%"
-	rows, err := d.conn.Query(`SELECT id,system_name,environment,ip_address,inventory_date,account_name,account_type,department_code,department,creator,owner_name,email,passphrase_rotate,status,remarks,created_at,updated_at,last_confirmed_at FROM privileged_accounts WHERE account_name LIKE ? OR owner_name LIKE ? OR system_name LIKE ? OR department LIKE ? OR department_code LIKE ? ORDER BY id DESC`,
-		like, like, like, like, like)
+	query := `SELECT id,system_name,environment,ip_address,inventory_date,account_name,account_type,department_code,department,creator,owner_name,email,passphrase_rotate,status,remarks,created_at,updated_at,last_confirmed_at FROM privileged_accounts WHERE (account_name LIKE ? OR owner_name LIKE ? OR system_name LIKE ? OR department LIKE ? OR department_code LIKE ?)`
+	args := []interface{}{like, like, like, like, like}
+	if strings.TrimSpace(creator) != "" {
+		query += ` AND creator = ?`
+		args = append(args, creator)
+	}
+	query += ` ORDER BY id DESC`
+	rows, err := d.conn.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -703,7 +934,18 @@ func (d *DB) SearchAccounts(keyword string) ([]models.PrivilegedAccount, error) 
 
 // BulkSetPending 批次設定 pending 狀態發送通知
 func (d *DB) GetActiveAccountsWithEmail() ([]models.PrivilegedAccount, error) {
-	rows, err := d.conn.Query(`SELECT id,system_name,environment,ip_address,inventory_date,account_name,account_type,department_code,department,creator,owner_name,email,passphrase_rotate,status,remarks,created_at,updated_at,last_confirmed_at FROM privileged_accounts WHERE status='active' AND email != '' ORDER BY id`)
+	return d.GetActiveAccountsWithEmailByCreator("")
+}
+
+func (d *DB) GetActiveAccountsWithEmailByCreator(creator string) ([]models.PrivilegedAccount, error) {
+	query := `SELECT id,system_name,environment,ip_address,inventory_date,account_name,account_type,department_code,department,creator,owner_name,email,passphrase_rotate,status,remarks,created_at,updated_at,last_confirmed_at FROM privileged_accounts WHERE status='active' AND email != ''`
+	args := []interface{}{}
+	if strings.TrimSpace(creator) != "" {
+		query += ` AND creator = ?`
+		args = append(args, creator)
+	}
+	query += ` ORDER BY id`
+	rows, err := d.conn.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -765,7 +1007,18 @@ func (d *DB) ListCustomTableTemplateRecords() ([]models.CustomTableTemplateRecor
 }
 
 func (d *DB) ListSystemPlatformRequests() ([]models.SystemPlatformRequest, error) {
-	rows, err := d.conn.Query(`SELECT id,request_date,applicant_name,applicant_department,applicant_title,office_phone,email,pi_name,system_name,system_alias,system_purpose,estimated_users,internal_only,ip_restriction,request_start_date,request_end_date,request_type,shutdown_retain_months,shutdown_reason,environment_type,operating_system,operating_system_other,disk_size,special_requirements,domain_settings,other_requirements,backup_required,backup_requirements,backup_reason,applicant_signature,supervisor_signature,status,creator,remarks,created_at,updated_at FROM system_platform_requests ORDER BY id DESC`)
+	return d.ListSystemPlatformRequestsByCreator("")
+}
+
+func (d *DB) ListSystemPlatformRequestsByCreator(creator string) ([]models.SystemPlatformRequest, error) {
+	query := `SELECT id,request_date,applicant_name,applicant_department,applicant_title,office_phone,email,pi_name,system_name,system_alias,system_purpose,estimated_users,internal_only,ip_restriction,request_start_date,request_end_date,request_type,shutdown_retain_months,shutdown_reason,environment_type,operating_system,operating_system_other,disk_size,special_requirements,domain_settings,other_requirements,backup_required,backup_requirements,backup_reason,applicant_signature,supervisor_signature,status,creator,remarks,created_at,updated_at FROM system_platform_requests`
+	args := []interface{}{}
+	if strings.TrimSpace(creator) != "" {
+		query += ` WHERE creator=?`
+		args = append(args, creator)
+	}
+	query += ` ORDER BY id DESC`
+	rows, err := d.conn.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -785,7 +1038,17 @@ func (d *DB) ListSystemPlatformRequests() ([]models.SystemPlatformRequest, error
 }
 
 func (d *DB) GetSystemPlatformRequest(id int) (*models.SystemPlatformRequest, error) {
-	row := d.conn.QueryRow(`SELECT id,request_date,applicant_name,applicant_department,applicant_title,office_phone,email,pi_name,system_name,system_alias,system_purpose,estimated_users,internal_only,ip_restriction,request_start_date,request_end_date,request_type,shutdown_retain_months,shutdown_reason,environment_type,operating_system,operating_system_other,disk_size,special_requirements,domain_settings,other_requirements,backup_required,backup_requirements,backup_reason,applicant_signature,supervisor_signature,status,creator,remarks,created_at,updated_at FROM system_platform_requests WHERE id=?`, id)
+	return d.GetSystemPlatformRequestByCreator(id, "")
+}
+
+func (d *DB) GetSystemPlatformRequestByCreator(id int, creator string) (*models.SystemPlatformRequest, error) {
+	query := `SELECT id,request_date,applicant_name,applicant_department,applicant_title,office_phone,email,pi_name,system_name,system_alias,system_purpose,estimated_users,internal_only,ip_restriction,request_start_date,request_end_date,request_type,shutdown_retain_months,shutdown_reason,environment_type,operating_system,operating_system_other,disk_size,special_requirements,domain_settings,other_requirements,backup_required,backup_requirements,backup_reason,applicant_signature,supervisor_signature,status,creator,remarks,created_at,updated_at FROM system_platform_requests WHERE id=?`
+	args := []interface{}{id}
+	if strings.TrimSpace(creator) != "" {
+		query += ` AND creator=?`
+		args = append(args, creator)
+	}
+	row := d.conn.QueryRow(query, args...)
 	var r models.SystemPlatformRequest
 	if err := row.Scan(&r.ID, &r.RequestDate, &r.ApplicantName, &r.ApplicantDepartment, &r.ApplicantTitle, &r.OfficePhone, &r.Email, &r.PIName, &r.SystemName, &r.SystemAlias, &r.SystemPurpose, &r.EstimatedUsers, &r.InternalOnly, &r.IPRestriction, &r.RequestStartDate, &r.RequestEndDate, &r.RequestType, &r.ShutdownRetainMonths, &r.ShutdownReason, &r.EnvironmentType, &r.OperatingSystem, &r.OperatingSystemOther, &r.DiskSize, &r.SpecialRequirements, &r.DomainSettings, &r.OtherRequirements, &r.BackupRequired, &r.BackupRequirements, &r.BackupReason, &r.ApplicantSignature, &r.SupervisorSignature, &r.Status, &r.Creator, &r.Remarks, &r.CreatedAt, &r.UpdatedAt); err != nil {
 		return nil, err
@@ -809,12 +1072,33 @@ func (d *DB) UpdateSystemPlatformRequest(r *models.SystemPlatformRequest) error 
 }
 
 func (d *DB) DeleteSystemPlatformRequest(id int) error {
-	_, err := d.conn.Exec(`DELETE FROM system_platform_requests WHERE id=?`, id)
+	return d.DeleteSystemPlatformRequestByCreator(id, "")
+}
+
+func (d *DB) DeleteSystemPlatformRequestByCreator(id int, creator string) error {
+	query := `DELETE FROM system_platform_requests WHERE id=?`
+	args := []interface{}{id}
+	if strings.TrimSpace(creator) != "" {
+		query += ` AND creator=?`
+		args = append(args, creator)
+	}
+	_, err := d.conn.Exec(query, args...)
 	return err
 }
 
 func (d *DB) ListFirewallRequests() ([]models.FirewallRequest, error) {
-	rows, err := d.conn.Query(`SELECT id,legacy_form_number,system_name,action,purpose_type,source_zone,source_zone2,source_ip,destination_zone,destination_zone2,destination_ip,protocol_type,start_date,end_date,request_date,rule_description,firewall_zone,firewall_id,status,creator,remarks,created_at,updated_at FROM firewall_requests ORDER BY id DESC`)
+	return d.ListFirewallRequestsByCreator("")
+}
+
+func (d *DB) ListFirewallRequestsByCreator(creator string) ([]models.FirewallRequest, error) {
+	query := `SELECT id,legacy_form_number,system_name,action,purpose_type,source_zone,source_zone2,source_ip,destination_zone,destination_zone2,destination_ip,protocol_type,start_date,end_date,request_date,rule_description,firewall_zone,firewall_id,status,creator,remarks,created_at,updated_at FROM firewall_requests`
+	args := []interface{}{}
+	if strings.TrimSpace(creator) != "" {
+		query += ` WHERE creator=?`
+		args = append(args, creator)
+	}
+	query += ` ORDER BY id DESC`
+	rows, err := d.conn.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -834,7 +1118,17 @@ func (d *DB) ListFirewallRequests() ([]models.FirewallRequest, error) {
 }
 
 func (d *DB) GetFirewallRequest(id int) (*models.FirewallRequest, error) {
-	row := d.conn.QueryRow(`SELECT id,legacy_form_number,system_name,action,purpose_type,source_zone,source_zone2,source_ip,destination_zone,destination_zone2,destination_ip,protocol_type,start_date,end_date,request_date,rule_description,firewall_zone,firewall_id,status,creator,remarks,created_at,updated_at FROM firewall_requests WHERE id=?`, id)
+	return d.GetFirewallRequestByCreator(id, "")
+}
+
+func (d *DB) GetFirewallRequestByCreator(id int, creator string) (*models.FirewallRequest, error) {
+	query := `SELECT id,legacy_form_number,system_name,action,purpose_type,source_zone,source_zone2,source_ip,destination_zone,destination_zone2,destination_ip,protocol_type,start_date,end_date,request_date,rule_description,firewall_zone,firewall_id,status,creator,remarks,created_at,updated_at FROM firewall_requests WHERE id=?`
+	args := []interface{}{id}
+	if strings.TrimSpace(creator) != "" {
+		query += ` AND creator=?`
+		args = append(args, creator)
+	}
+	row := d.conn.QueryRow(query, args...)
 	var r models.FirewallRequest
 	if err := row.Scan(&r.ID, &r.LegacyFormNumber, &r.SystemName, &r.Action, &r.PurposeType, &r.SourceZone, &r.SourceZone2, &r.SourceIP, &r.DestinationZone, &r.DestinationZone2, &r.DestinationIP, &r.ProtocolType, &r.StartDate, &r.EndDate, &r.RequestDate, &r.RuleDescription, &r.FirewallZone, &r.FirewallID, &r.Status, &r.Creator, &r.Remarks, &r.CreatedAt, &r.UpdatedAt); err != nil {
 		return nil, err
@@ -858,15 +1152,29 @@ func (d *DB) UpdateFirewallRequest(r *models.FirewallRequest) error {
 }
 
 func (d *DB) DeleteFirewallRequest(id int) error {
-	_, err := d.conn.Exec(`DELETE FROM firewall_requests WHERE id=?`, id)
+	return d.DeleteFirewallRequestByCreator(id, "")
+}
+
+func (d *DB) DeleteFirewallRequestByCreator(id int, creator string) error {
+	query := `DELETE FROM firewall_requests WHERE id=?`
+	args := []interface{}{id}
+	if strings.TrimSpace(creator) != "" {
+		query += ` AND creator=?`
+		args = append(args, creator)
+	}
+	_, err := d.conn.Exec(query, args...)
 	return err
 }
 
 func (d *DB) ListAssetInventoryRecords() ([]models.AssetInventoryRecord, error) {
-	return d.ListAssetInventoryRecordsFiltered("", "all", "")
+	return d.ListAssetInventoryRecordsByCreator("", "all", "", "")
 }
 
 func (d *DB) ListAssetInventoryRecordsFiltered(keyword, status, assetType string) ([]models.AssetInventoryRecord, error) {
+	return d.ListAssetInventoryRecordsByCreator(keyword, status, assetType, "")
+}
+
+func (d *DB) ListAssetInventoryRecordsByCreator(keyword, status, assetType, creator string) ([]models.AssetInventoryRecord, error) {
 	base := `SELECT id,system_name,asset_code,asset_type,asset_name,vendor_name,is_core_asset,has_national_security_concern,asset_description,quantity,os_config_baseline,browser_config_baseline,network_config_baseline,application_config_baseline,other_config_baseline,config_exception_code,manager_department,user_department,location,confidentiality,integrity,availability,asset_value,legal_compliance,protection_level,mtpd,rto,rpo,status,creator,remarks,created_at,updated_at FROM asset_inventory_records`
 	clauses := []string{}
 	args := []interface{}{}
@@ -882,6 +1190,10 @@ func (d *DB) ListAssetInventoryRecordsFiltered(keyword, status, assetType string
 		like := "%" + strings.TrimSpace(keyword) + "%"
 		clauses = append(clauses, "(system_name LIKE ? OR asset_code LIKE ? OR asset_name LIKE ? OR manager_department LIKE ? OR user_department LIKE ? OR location LIKE ?)")
 		args = append(args, like, like, like, like, like, like)
+	}
+	if strings.TrimSpace(creator) != "" {
+		clauses = append(clauses, "creator = ?")
+		args = append(args, creator)
 	}
 	query := base
 	if len(clauses) > 0 {
@@ -908,7 +1220,17 @@ func (d *DB) ListAssetInventoryRecordsFiltered(keyword, status, assetType string
 }
 
 func (d *DB) GetAssetInventoryRecord(id int) (*models.AssetInventoryRecord, error) {
-	row := d.conn.QueryRow(`SELECT id,system_name,asset_code,asset_type,asset_name,vendor_name,is_core_asset,has_national_security_concern,asset_description,quantity,os_config_baseline,browser_config_baseline,network_config_baseline,application_config_baseline,other_config_baseline,config_exception_code,manager_department,user_department,location,confidentiality,integrity,availability,asset_value,legal_compliance,protection_level,mtpd,rto,rpo,status,creator,remarks,created_at,updated_at FROM asset_inventory_records WHERE id=?`, id)
+	return d.GetAssetInventoryRecordByCreator(id, "")
+}
+
+func (d *DB) GetAssetInventoryRecordByCreator(id int, creator string) (*models.AssetInventoryRecord, error) {
+	query := `SELECT id,system_name,asset_code,asset_type,asset_name,vendor_name,is_core_asset,has_national_security_concern,asset_description,quantity,os_config_baseline,browser_config_baseline,network_config_baseline,application_config_baseline,other_config_baseline,config_exception_code,manager_department,user_department,location,confidentiality,integrity,availability,asset_value,legal_compliance,protection_level,mtpd,rto,rpo,status,creator,remarks,created_at,updated_at FROM asset_inventory_records WHERE id=?`
+	args := []interface{}{id}
+	if strings.TrimSpace(creator) != "" {
+		query += ` AND creator=?`
+		args = append(args, creator)
+	}
+	row := d.conn.QueryRow(query, args...)
 	var r models.AssetInventoryRecord
 	if err := row.Scan(&r.ID, &r.SystemName, &r.AssetCode, &r.AssetType, &r.AssetName, &r.VendorName, &r.IsCoreAsset, &r.HasNationalSecurityConcern, &r.AssetDescription, &r.Quantity, &r.OsConfigBaseline, &r.BrowserConfigBaseline, &r.NetworkConfigBaseline, &r.ApplicationConfigBaseline, &r.OtherConfigBaseline, &r.ConfigExceptionCode, &r.ManagerDepartment, &r.UserDepartment, &r.Location, &r.Confidentiality, &r.Integrity, &r.Availability, &r.AssetValue, &r.LegalCompliance, &r.ProtectionLevel, &r.Mtpd, &r.Rto, &r.Rpo, &r.Status, &r.Creator, &r.Remarks, &r.CreatedAt, &r.UpdatedAt); err != nil {
 		return nil, err
@@ -932,6 +1254,16 @@ func (d *DB) UpdateAssetInventoryRecord(r *models.AssetInventoryRecord) error {
 }
 
 func (d *DB) DeleteAssetInventoryRecord(id int) error {
-	_, err := d.conn.Exec(`DELETE FROM asset_inventory_records WHERE id=?`, id)
+	return d.DeleteAssetInventoryRecordByCreator(id, "")
+}
+
+func (d *DB) DeleteAssetInventoryRecordByCreator(id int, creator string) error {
+	query := `DELETE FROM asset_inventory_records WHERE id=?`
+	args := []interface{}{id}
+	if strings.TrimSpace(creator) != "" {
+		query += ` AND creator=?`
+		args = append(args, creator)
+	}
+	_, err := d.conn.Exec(query, args...)
 	return err
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"isms-privilege/internal/datefmt"
 	"io"
 	"isms-privilege/internal/db"
 	"isms-privilege/internal/docxexport"
@@ -31,6 +32,7 @@ var dashboardProviders = []models.DashboardFormProvider{
 	{Key: "privileged_accounts", Label: "特殊權限帳號資料", Description: "使用 privileged_accounts 資料表作為首頁表單資料來源"},
 	{Key: "asset_inventory", Label: "資訊資產清冊", Description: "使用 asset_inventory_records 資料表作為首頁表單資料來源"},
 	{Key: "firewall_requests", Label: "防火牆申請資料", Description: "使用 firewall_requests 資料表作為首頁表單資料來源"},
+	{Key: "protection_baselines", Label: "資通系統防護基準執行說明表", Description: "使用 protection_baseline_records 與 protection_baseline_controls 作為首頁表單資料來源"},
 	{Key: "system_platform_requests", Label: "系統平台申請資料", Description: "使用 system_platform_requests 資料表作為首頁表單資料來源"},
 	{Key: "placeholder", Label: "示範骨架 / 尚未接資料", Description: "保留表單卡片與說明，首頁顯示空狀態"},
 	{Key: "custom_table_template", Label: "自訂資料表範本", Description: "作為未來接新資料表的 provider 樣板，預設先回傳空資料"},
@@ -71,10 +73,11 @@ func generateToken() (string, error) {
 func (h *Handler) getAccountsForRequest(r *http.Request) ([]models.PrivilegedAccount, error) {
 	status := r.URL.Query().Get("status")
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	currentUser := GetUserEmail(r)
 	if q != "" {
-		return h.DB.SearchAccounts(q)
+		return h.DB.SearchAccountsByCreator(q, currentUser)
 	}
-	return h.DB.ListAccounts(status)
+	return h.DB.ListAccountsByCreator(status, currentUser)
 }
 
 // ---- Accounts CRUD ----
@@ -123,9 +126,9 @@ func (h *Handler) ExportAccountsDOCX(w http.ResponseWriter, r *http.Request) {
 }
 
 func buildExportFilename(accounts []models.PrivilegedAccount) string {
-	datePart := time.Now().Format("20060102")
+	datePart := datefmt.Today()
 	if len(accounts) > 0 && strings.TrimSpace(accounts[0].InventoryDate) != "" {
-		datePart = strings.TrimSpace(accounts[0].InventoryDate)
+		datePart = datefmt.NormalizeDate(accounts[0].InventoryDate)
 	}
 	return fmt.Sprintf("ISMS-04-062_特殊權限帳號盤點清冊_%s.docx", datePart)
 }
@@ -139,9 +142,9 @@ func buildPlatformRequestPDFExportFilename(req models.SystemPlatformRequest) str
 }
 
 func buildPlatformRequestExportFilenameWithExt(req models.SystemPlatformRequest, ext string) string {
-	datePart := strings.TrimSpace(req.RequestDate)
+	datePart := datefmt.NormalizeDate(req.RequestDate)
 	if datePart == "" {
-		datePart = time.Now().Format("20060102")
+		datePart = datefmt.Today()
 	}
 	systemName := sanitizeFilenamePart(firstNonEmpty(req.SystemName, "system-platform-request"))
 	return fmt.Sprintf("ISMS-04-078_系統平台申請表_%s_%s%s", systemName, datePart, ext)
@@ -175,7 +178,7 @@ func firstNonEmpty(values ...string) string {
 // ---- System Platform Requests CRUD ----
 
 func (h *Handler) ListFirewallRequests(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.DB.ListFirewallRequests()
+	rows, err := h.DB.ListFirewallRequestsByCreator(GetUserEmail(r))
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
@@ -196,7 +199,7 @@ func (h *Handler) getAssetInventoryRecordsForRequest(r *http.Request) ([]models.
 	status := strings.TrimSpace(r.URL.Query().Get("status"))
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	assetType := strings.TrimSpace(r.URL.Query().Get("asset_type"))
-	return h.DB.ListAssetInventoryRecordsFiltered(q, status, assetType)
+	return h.DB.ListAssetInventoryRecordsByCreator(q, status, assetType, GetUserEmail(r))
 }
 
 func (h *Handler) GetAssetInventoryRecord(w http.ResponseWriter, r *http.Request) {
@@ -205,7 +208,7 @@ func (h *Handler) GetAssetInventoryRecord(w http.ResponseWriter, r *http.Request
 		writeJSON(w, 400, map[string]string{"error": "invalid id"})
 		return
 	}
-	row, err := h.DB.GetAssetInventoryRecord(id)
+	row, err := h.DB.GetAssetInventoryRecordByCreator(id, GetUserEmail(r))
 	if err != nil {
 		writeJSON(w, 404, map[string]string{"error": "not found"})
 		return
@@ -244,10 +247,12 @@ func (h *Handler) UpdateAssetInventoryRecord(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	req.ID = id
-	existing, _ := h.DB.GetAssetInventoryRecord(id)
-	if existing != nil {
-		req.Creator = existing.Creator
+	existing, _ := h.DB.GetAssetInventoryRecordByCreator(id, GetUserEmail(r))
+	if existing == nil {
+		writeJSON(w, 404, map[string]string{"error": "not found"})
+		return
 	}
+	req.Creator = existing.Creator
 	if err := h.DB.UpdateAssetInventoryRecord(&req); err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
@@ -261,7 +266,12 @@ func (h *Handler) DeleteAssetInventoryRecord(w http.ResponseWriter, r *http.Requ
 		writeJSON(w, 400, map[string]string{"error": "invalid id"})
 		return
 	}
-	if err := h.DB.DeleteAssetInventoryRecord(id); err != nil {
+	existing, _ := h.DB.GetAssetInventoryRecordByCreator(id, GetUserEmail(r))
+	if existing == nil {
+		writeJSON(w, 404, map[string]string{"error": "not found"})
+		return
+	}
+	if err := h.DB.DeleteAssetInventoryRecordByCreator(id, GetUserEmail(r)); err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
 	}
@@ -407,7 +417,7 @@ func (h *Handler) ExportAssetInventoryXLSX(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	filename := fmt.Sprintf("ISMS-04-008_資訊資產清冊_%s.xlsx", time.Now().Format("20060102"))
+	filename := fmt.Sprintf("ISMS-04-008_資訊資產清冊_%s.xlsx", datefmt.Today())
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename*=UTF-8''%s", filename))
 	w.Header().Set("Content-Length", strconv.Itoa(buf.Len()))
@@ -435,7 +445,7 @@ func (h *Handler) ExportAssetInventoryDOCX(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	filename := fmt.Sprintf("ISMS-04-008_資訊資產清冊_%s.docx", time.Now().Format("20060102"))
+	filename := fmt.Sprintf("ISMS-04-008_資訊資產清冊_%s.docx", datefmt.Today())
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename*=UTF-8''%s", filename))
 	w.Header().Set("Content-Length", strconv.Itoa(len(docxBytes)))
@@ -464,7 +474,7 @@ func (h *Handler) ExportAssetInventoryPDF(w http.ResponseWriter, r *http.Request
 	}
 
 	pdfBytes, err := pdfexport.ConvertDOCXToPDF(pdfexport.ConvertOptions{
-		InputFilename: fmt.Sprintf("ISMS-04-008_資訊資產清冊_%s.docx", time.Now().Format("20060102")),
+		InputFilename: fmt.Sprintf("ISMS-04-008_資訊資產清冊_%s.docx", datefmt.Today()),
 		InputBytes:    docxBytes,
 	})
 	if err != nil {
@@ -472,7 +482,7 @@ func (h *Handler) ExportAssetInventoryPDF(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	filename := fmt.Sprintf("ISMS-04-008_資訊資產清冊_%s.pdf", time.Now().Format("20060102"))
+	filename := fmt.Sprintf("ISMS-04-008_資訊資產清冊_%s.pdf", datefmt.Today())
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename*=UTF-8''%s", filename))
 	w.Header().Set("Content-Length", strconv.Itoa(len(pdfBytes)))
@@ -485,7 +495,7 @@ func (h *Handler) GetFirewallRequest(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]string{"error": "invalid id"})
 		return
 	}
-	row, err := h.DB.GetFirewallRequest(id)
+	row, err := h.DB.GetFirewallRequestByCreator(id, GetUserEmail(r))
 	if err != nil {
 		writeJSON(w, 404, map[string]string{"error": "not found"})
 		return
@@ -524,10 +534,12 @@ func (h *Handler) UpdateFirewallRequest(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	req.ID = id
-	existing, _ := h.DB.GetFirewallRequest(id)
-	if existing != nil {
-		req.Creator = existing.Creator
+	existing, _ := h.DB.GetFirewallRequestByCreator(id, GetUserEmail(r))
+	if existing == nil {
+		writeJSON(w, 404, map[string]string{"error": "not found"})
+		return
 	}
+	req.Creator = existing.Creator
 	if err := h.DB.UpdateFirewallRequest(&req); err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
@@ -541,7 +553,12 @@ func (h *Handler) DeleteFirewallRequest(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, 400, map[string]string{"error": "invalid id"})
 		return
 	}
-	if err := h.DB.DeleteFirewallRequest(id); err != nil {
+	existing, _ := h.DB.GetFirewallRequestByCreator(id, GetUserEmail(r))
+	if existing == nil {
+		writeJSON(w, 404, map[string]string{"error": "not found"})
+		return
+	}
+	if err := h.DB.DeleteFirewallRequestByCreator(id, GetUserEmail(r)); err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
 	}
@@ -549,7 +566,7 @@ func (h *Handler) DeleteFirewallRequest(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *Handler) ListSystemPlatformRequests(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.DB.ListSystemPlatformRequests()
+	rows, err := h.DB.ListSystemPlatformRequestsByCreator(GetUserEmail(r))
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
@@ -563,7 +580,7 @@ func (h *Handler) GetSystemPlatformRequest(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, 400, map[string]string{"error": "invalid id"})
 		return
 	}
-	row, err := h.DB.GetSystemPlatformRequest(id)
+	row, err := h.DB.GetSystemPlatformRequestByCreator(id, GetUserEmail(r))
 	if err != nil {
 		writeJSON(w, 404, map[string]string{"error": "not found"})
 		return
@@ -602,10 +619,12 @@ func (h *Handler) UpdateSystemPlatformRequest(w http.ResponseWriter, r *http.Req
 		return
 	}
 	req.ID = id
-	existing, _ := h.DB.GetSystemPlatformRequest(id)
-	if existing != nil {
-		req.Creator = existing.Creator
+	existing, _ := h.DB.GetSystemPlatformRequestByCreator(id, GetUserEmail(r))
+	if existing == nil {
+		writeJSON(w, 404, map[string]string{"error": "not found"})
+		return
 	}
+	req.Creator = existing.Creator
 	if err := h.DB.UpdateSystemPlatformRequest(&req); err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
@@ -619,7 +638,12 @@ func (h *Handler) DeleteSystemPlatformRequest(w http.ResponseWriter, r *http.Req
 		writeJSON(w, 400, map[string]string{"error": "invalid id"})
 		return
 	}
-	if err := h.DB.DeleteSystemPlatformRequest(id); err != nil {
+	existing, _ := h.DB.GetSystemPlatformRequestByCreator(id, GetUserEmail(r))
+	if existing == nil {
+		writeJSON(w, 404, map[string]string{"error": "not found"})
+		return
+	}
+	if err := h.DB.DeleteSystemPlatformRequestByCreator(id, GetUserEmail(r)); err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
 	}
@@ -632,7 +656,7 @@ func (h *Handler) ExportSystemPlatformRequestDOCX(w http.ResponseWriter, r *http
 		writeJSON(w, 400, map[string]string{"error": "invalid id"})
 		return
 	}
-	req, err := h.DB.GetSystemPlatformRequest(id)
+	req, err := h.DB.GetSystemPlatformRequestByCreator(id, GetUserEmail(r))
 	if err != nil {
 		writeJSON(w, 404, map[string]string{"error": "not found"})
 		return
@@ -668,7 +692,7 @@ func (h *Handler) ExportSystemPlatformRequestPDF(w http.ResponseWriter, r *http.
 		writeJSON(w, 400, map[string]string{"error": "invalid id"})
 		return
 	}
-	req, err := h.DB.GetSystemPlatformRequest(id)
+	req, err := h.DB.GetSystemPlatformRequestByCreator(id, GetUserEmail(r))
 	if err != nil {
 		writeJSON(w, 404, map[string]string{"error": "not found"})
 		return
@@ -714,7 +738,7 @@ func (h *Handler) GetAccount(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]string{"error": "invalid id"})
 		return
 	}
-	a, err := h.DB.GetAccount(id)
+	a, err := h.DB.GetAccountByCreator(id, GetUserEmail(r))
 	if err != nil {
 		writeJSON(w, 404, map[string]string{"error": "not found"})
 		return
@@ -755,10 +779,12 @@ func (h *Handler) UpdateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.ID = id
-	existing, _ := h.DB.GetAccount(id)
-	if existing != nil {
-		a.Creator = existing.Creator
+	existing, _ := h.DB.GetAccountByCreator(id, GetUserEmail(r))
+	if existing == nil {
+		writeJSON(w, 404, map[string]string{"error": "not found"})
+		return
 	}
+	a.Creator = existing.Creator
 	if err := h.DB.UpdateAccount(&a); err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
@@ -773,7 +799,12 @@ func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]string{"error": "invalid id"})
 		return
 	}
-	if err := h.DB.DeleteAccount(id); err != nil {
+	existing, _ := h.DB.GetAccountByCreator(id, GetUserEmail(r))
+	if existing == nil {
+		writeJSON(w, 404, map[string]string{"error": "not found"})
+		return
+	}
+	if err := h.DB.DeleteAccountByCreator(id, GetUserEmail(r)); err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
 	}
@@ -790,7 +821,7 @@ func (h *Handler) NotifyAccount(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 400, map[string]string{"error": "invalid id"})
 		return
 	}
-	a, err := h.DB.GetAccount(id)
+	a, err := h.DB.GetAccountByCreator(id, GetUserEmail(r))
 	if err != nil {
 		writeJSON(w, 404, map[string]string{"error": "not found"})
 		return
@@ -831,7 +862,7 @@ func (h *Handler) NotifyAccount(w http.ResponseWriter, r *http.Request) {
 
 // POST /api/notify-all  → bulk notify all active accounts with email
 func (h *Handler) NotifyAll(w http.ResponseWriter, r *http.Request) {
-	accounts, err := h.DB.GetActiveAccountsWithEmail()
+	accounts, err := h.DB.GetActiveAccountsWithEmailByCreator(GetUserEmail(r))
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
@@ -919,7 +950,7 @@ a{display:inline-block;margin-top:20px;background:#1a3a5c;color:#fff;padding:10p
 
 // GET /api/stats
 func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
-	stats, err := h.DB.Stats()
+	stats, err := h.DB.StatsByCreator(GetUserEmail(r))
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
@@ -931,7 +962,7 @@ func (h *Handler) Stats(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/notification-logs
 func (h *Handler) ListLogs(w http.ResponseWriter, r *http.Request) {
-	logs, err := h.DB.ListNotificationLogs()
+	logs, err := h.DB.ListNotificationLogsByCreator(GetUserEmail(r))
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
@@ -940,6 +971,27 @@ func (h *Handler) ListLogs(w http.ResponseWriter, r *http.Request) {
 		logs = []models.NotificationLog{}
 	}
 	writeJSON(w, 200, logs)
+}
+
+// GET /api/operation-logs
+func (h *Handler) ListOperationLogs(w http.ResponseWriter, r *http.Request) {
+	limit, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("limit")))
+	logs, err := h.DB.ListOperationLogsByUser(limit, GetUserEmail(r))
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, logs)
+}
+
+// POST /api/creator-backfill
+func (h *Handler) BackfillCreators(w http.ResponseWriter, r *http.Request) {
+	result, err := h.DB.BackfillEmptyCreators(GetUserEmail(r))
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, result)
 }
 
 // ---- Dashboard Forms ----
@@ -1067,7 +1119,7 @@ func (h *Handler) ListDashboardRecords(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 404, map[string]string{"error": "dashboard form not found"})
 		return
 	}
-	records, err := h.loadDashboardRecords(*form)
+	records, err := h.loadDashboardRecords(*form, GetUserEmail(r))
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
@@ -1088,16 +1140,18 @@ func (h *Handler) ListDashboardRecords(w http.ResponseWriter, r *http.Request) {
 //
 //	case "asset_inventory":
 //	  return h.loadAssetInventoryDashboardRecords()
-func (h *Handler) loadDashboardRecords(form models.DashboardForm) ([]models.DashboardRecord, error) {
+func (h *Handler) loadDashboardRecords(form models.DashboardForm, creator string) ([]models.DashboardRecord, error) {
 	switch form.ProviderKey {
 	case "privileged_accounts":
-		return h.loadPrivilegedAccountDashboardRecords()
+		return h.loadPrivilegedAccountDashboardRecords(creator)
 	case "asset_inventory":
-		return h.loadAssetInventoryDashboardRecords()
+		return h.loadAssetInventoryDashboardRecords(creator)
 	case "firewall_requests":
-		return h.loadFirewallRequestDashboardRecords()
+		return h.loadFirewallRequestDashboardRecords(creator)
+	case "protection_baselines":
+		return h.loadProtectionBaselineDashboardRecords(creator)
 	case "system_platform_requests":
-		return h.loadSystemPlatformRequestDashboardRecords()
+		return h.loadSystemPlatformRequestDashboardRecords(creator)
 	case "placeholder":
 		return h.loadPlaceholderDashboardRecords()
 	case "custom_table_template":
@@ -1109,8 +1163,8 @@ func (h *Handler) loadDashboardRecords(form models.DashboardForm) ([]models.Dash
 	}
 }
 
-func (h *Handler) loadAssetInventoryDashboardRecords() ([]models.DashboardRecord, error) {
-	rows, err := h.DB.ListAssetInventoryRecords()
+func (h *Handler) loadAssetInventoryDashboardRecords(creator string) ([]models.DashboardRecord, error) {
+	rows, err := h.DB.ListAssetInventoryRecordsByCreator("", "all", "", creator)
 	if err != nil {
 		return nil, err
 	}
@@ -1136,8 +1190,8 @@ func (h *Handler) loadAssetInventoryDashboardRecords() ([]models.DashboardRecord
 	return records, nil
 }
 
-func (h *Handler) loadPrivilegedAccountDashboardRecords() ([]models.DashboardRecord, error) {
-	accounts, err := h.DB.ListAccounts("all")
+func (h *Handler) loadPrivilegedAccountDashboardRecords(creator string) ([]models.DashboardRecord, error) {
+	accounts, err := h.DB.ListAccountsByCreator("all", creator)
 	if err != nil {
 		return nil, err
 	}
@@ -1161,8 +1215,8 @@ func (h *Handler) loadPlaceholderDashboardRecords() ([]models.DashboardRecord, e
 	return []models.DashboardRecord{}, nil
 }
 
-func (h *Handler) loadFirewallRequestDashboardRecords() ([]models.DashboardRecord, error) {
-	rows, err := h.DB.ListFirewallRequests()
+func (h *Handler) loadFirewallRequestDashboardRecords(creator string) ([]models.DashboardRecord, error) {
+	rows, err := h.DB.ListFirewallRequestsByCreator(creator)
 	if err != nil {
 		return nil, err
 	}
@@ -1188,8 +1242,8 @@ func (h *Handler) loadFirewallRequestDashboardRecords() ([]models.DashboardRecor
 	return records, nil
 }
 
-func (h *Handler) loadSystemPlatformRequestDashboardRecords() ([]models.DashboardRecord, error) {
-	rows, err := h.DB.ListSystemPlatformRequests()
+func (h *Handler) loadSystemPlatformRequestDashboardRecords(creator string) ([]models.DashboardRecord, error) {
+	rows, err := h.DB.ListSystemPlatformRequestsByCreator(creator)
 	if err != nil {
 		return nil, err
 	}
@@ -1210,6 +1264,29 @@ func (h *Handler) loadSystemPlatformRequestDashboardRecords() ([]models.Dashboar
 			InventoryDate: row.RequestDate,
 			UpdatedAt:     row.UpdatedAt,
 			Email:         row.Email,
+		})
+	}
+	return records, nil
+}
+
+func (h *Handler) loadProtectionBaselineDashboardRecords(creator string) ([]models.DashboardRecord, error) {
+	rows, err := h.DB.ListProtectionBaselineRecordsByCreator(creator)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]models.DashboardRecord, 0, len(rows))
+	for _, row := range rows {
+		secondary := firstNonEmpty(row.SecurityLevel, "未分級")
+		secondary = fmt.Sprintf("安全等級 %s / 套用 %d-%d", secondary, row.AppliedCount, row.TotalControls)
+		records = append(records, models.DashboardRecord{
+			ID:            row.ID,
+			PrimaryName:   row.SystemName,
+			SecondaryName: secondary,
+			OwnerName:     row.FilledBy,
+			Status:        row.Status,
+			InventoryDate: row.FormDate,
+			UpdatedAt:     row.UpdatedAt,
+			Email:         "",
 		})
 	}
 	return records, nil
@@ -1268,29 +1345,41 @@ func (h *Handler) loadCustomTableTemplateDashboardRecords() ([]models.DashboardR
 
 // RegisterRoutes 掛載所有路由到 mux
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
+	auditAuth := func(next http.HandlerFunc) http.HandlerFunc {
+		return AuthMiddleware(h.AuditMiddleware(next))
+	}
+
 	// SPA & confirm page
 	mux.HandleFunc("/confirm", h.ConfirmAccount)
 
 	// Auth
-	mux.HandleFunc("/api/login", h.Login)
-	mux.HandleFunc("/api/logout", h.Logout)
-	mux.HandleFunc("/oauth2callback", h.OAuth2Callback)
-	mux.HandleFunc("/api/me", h.Me)
+	mux.HandleFunc("/api/login", h.AuditMiddleware(h.Login))
+	mux.HandleFunc("/api/logout", auditAuth(h.Logout))
+	mux.HandleFunc("/oauth2callback", h.AuditMiddleware(h.OAuth2Callback))
+	mux.HandleFunc("/api/me", auditAuth(h.Me))
 
 	// API
-	mux.HandleFunc("/api/stats", AuthMiddleware(h.Stats))
-	mux.HandleFunc("/api/notification-logs", AuthMiddleware(h.ListLogs))
-	mux.HandleFunc("/api/notify-all", AuthMiddleware(h.NotifyAll))
-	mux.HandleFunc("/api/dashboard-providers", AuthMiddleware(h.ListDashboardProviders))
-	mux.HandleFunc("/api/dashboard-records", AuthMiddleware(h.ListDashboardRecords))
-	mux.HandleFunc("/api/dashboard-forms/reorder", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/stats", auditAuth(h.Stats))
+	mux.HandleFunc("/api/notification-logs", auditAuth(h.ListLogs))
+	mux.HandleFunc("/api/operation-logs", auditAuth(h.ListOperationLogs))
+	mux.HandleFunc("/api/creator-backfill", auditAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			h.BackfillCreators(w, r)
+			return
+		}
+		http.Error(w, "method not allowed", 405)
+	}))
+	mux.HandleFunc("/api/notify-all", auditAuth(h.NotifyAll))
+	mux.HandleFunc("/api/dashboard-providers", auditAuth(h.ListDashboardProviders))
+	mux.HandleFunc("/api/dashboard-records", auditAuth(h.ListDashboardRecords))
+	mux.HandleFunc("/api/dashboard-forms/reorder", auditAuth(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			h.ReorderDashboardForms(w, r)
 			return
 		}
 		http.Error(w, "method not allowed", 405)
 	}))
-	mux.HandleFunc("/api/dashboard-forms", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/dashboard-forms", auditAuth(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			h.ListDashboardForms(w, r)
@@ -1300,7 +1389,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 			http.Error(w, "method not allowed", 405)
 		}
 	}))
-	mux.HandleFunc("/api/dashboard-forms/", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/dashboard-forms/", auditAuth(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			h.GetDashboardForm(w, r)
@@ -1313,7 +1402,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 		}
 	}))
 
-	mux.HandleFunc("/api/accounts", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/accounts", auditAuth(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			h.ListAccounts(w, r)
@@ -1324,7 +1413,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 		}
 	}))
 
-	mux.HandleFunc("/api/accounts/export-docx", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/accounts/export-docx", auditAuth(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			h.ExportAccountsDOCX(w, r)
 			return
@@ -1332,7 +1421,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 		http.Error(w, "method not allowed", 405)
 	}))
 
-	mux.HandleFunc("/api/accounts/", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/accounts/", auditAuth(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		if strings.HasSuffix(path, "/notify") {
 			if r.Method == http.MethodPost {
@@ -1354,7 +1443,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 		}
 	}))
 
-	mux.HandleFunc("/api/platform-requests", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/platform-requests", auditAuth(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			h.ListSystemPlatformRequests(w, r)
@@ -1365,7 +1454,47 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 		}
 	}))
 
-	mux.HandleFunc("/api/asset-inventory", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/protection-baselines", auditAuth(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			h.ListProtectionBaselineRecords(w, r)
+		case http.MethodPost:
+			h.CreateProtectionBaselineRecord(w, r)
+		default:
+			http.Error(w, "method not allowed", 405)
+		}
+	}))
+
+	mux.HandleFunc("/api/protection-baselines/template", auditAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			h.GetProtectionBaselineTemplate(w, r)
+			return
+		}
+		http.Error(w, "method not allowed", 405)
+	}))
+
+	mux.HandleFunc("/api/protection-baselines/", auditAuth(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/export-xlsx") {
+			if r.Method == http.MethodGet {
+				h.ExportProtectionBaselineXLSX(w, r)
+			} else {
+				http.Error(w, "method not allowed", 405)
+			}
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			h.GetProtectionBaselineRecord(w, r)
+		case http.MethodPut:
+			h.UpdateProtectionBaselineRecord(w, r)
+		case http.MethodDelete:
+			h.DeleteProtectionBaselineRecord(w, r)
+		default:
+			http.Error(w, "method not allowed", 405)
+		}
+	}))
+
+	mux.HandleFunc("/api/asset-inventory", auditAuth(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			h.ListAssetInventoryRecords(w, r)
@@ -1376,7 +1505,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 		}
 	}))
 
-	mux.HandleFunc("/api/asset-inventory/import-xlsx", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/asset-inventory/import-xlsx", auditAuth(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			h.ImportAssetInventoryXLSX(w, r)
 			return
@@ -1384,7 +1513,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 		http.Error(w, "method not allowed", 405)
 	}))
 
-	mux.HandleFunc("/api/asset-inventory/export-xlsx", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/asset-inventory/export-xlsx", auditAuth(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			h.ExportAssetInventoryXLSX(w, r)
 			return
@@ -1392,7 +1521,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 		http.Error(w, "method not allowed", 405)
 	}))
 
-	mux.HandleFunc("/api/asset-inventory/export-docx", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/asset-inventory/export-docx", auditAuth(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			h.ExportAssetInventoryDOCX(w, r)
 			return
@@ -1400,7 +1529,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 		http.Error(w, "method not allowed", 405)
 	}))
 
-	mux.HandleFunc("/api/asset-inventory/export-pdf", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/asset-inventory/export-pdf", auditAuth(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			h.ExportAssetInventoryPDF(w, r)
 			return
@@ -1408,7 +1537,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 		http.Error(w, "method not allowed", 405)
 	}))
 
-	mux.HandleFunc("/api/firewall-requests", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/firewall-requests", auditAuth(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			h.ListFirewallRequests(w, r)
@@ -1419,7 +1548,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 		}
 	}))
 
-	mux.HandleFunc("/api/firewall-requests/", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/firewall-requests/", auditAuth(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			h.GetFirewallRequest(w, r)
@@ -1432,7 +1561,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 		}
 	}))
 
-	mux.HandleFunc("/api/asset-inventory/", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/asset-inventory/", auditAuth(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			h.GetAssetInventoryRecord(w, r)
@@ -1445,7 +1574,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 		}
 	}))
 
-	mux.HandleFunc("/api/platform-requests/", AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/platform-requests/", auditAuth(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/export-docx") {
 			if r.Method == http.MethodGet {
 				h.ExportSystemPlatformRequestDOCX(w, r)
