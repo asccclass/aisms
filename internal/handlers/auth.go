@@ -5,10 +5,13 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"isms-privilege/internal/models"
 	"isms-privilege/internal/workspaceprofile"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -530,7 +533,190 @@ func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 func GetUserEmail(r *http.Request) string {
 	val := r.Context().Value(userEmailKey)
 	if val != nil {
-		return val.(string)
+		email := val.(string)
+		decoded, err := url.QueryUnescape(email)
+		if err == nil {
+			return decoded
+		}
+		return email
 	}
 	return ""
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.statusCode = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r *statusRecorder) Write(b []byte) (int, error) {
+	if r.statusCode == 0 {
+		r.statusCode = http.StatusOK
+	}
+	return r.ResponseWriter.Write(b)
+}
+
+func (h *Handler) AuditMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		recorder := &statusRecorder{ResponseWriter: w}
+		next.ServeHTTP(recorder, r)
+
+		if shouldSkipAuditLog(r.URL.Path) {
+			return
+		}
+		log := models.OperationLog{
+			EventType:     buildAuditEventType(r),
+			Location:      buildAuditLocation(r),
+			RequestPath:   r.URL.Path,
+			RequestMethod: r.Method,
+			StatusCode:    effectiveStatusCode(recorder.statusCode),
+			SourceIP:      resolveSourceIP(r),
+			UserAgent:     strings.TrimSpace(r.UserAgent()),
+			UserEmail:     firstNonEmpty(GetUserEmail(r), readAuditCookie(r, "admin_email")),
+			UserName:      readAuditCookie(r, "admin_name"),
+			UserGoogleID:  readAuditCookie(r, "admin_google_id"),
+			Department:    readAuditCookie(r, "admin_department"),
+		}
+		_ = h.DB.AddOperationLog(&log)
+	}
+}
+
+func effectiveStatusCode(code int) int {
+	if code == 0 {
+		return http.StatusOK
+	}
+	return code
+}
+
+func readAuditCookie(r *http.Request, name string) string {
+	c, err := r.Cookie(name)
+	if err != nil || c == nil {
+		return ""
+	}
+	return decodeCookieValue(c.Value)
+}
+
+func resolveSourceIP(r *http.Request) string {
+	for _, header := range []string{"X-Forwarded-For", "X-Real-IP"} {
+		raw := strings.TrimSpace(r.Header.Get(header))
+		if raw == "" {
+			continue
+		}
+		if header == "X-Forwarded-For" {
+			parts := strings.Split(raw, ",")
+			if len(parts) > 0 {
+				return strings.TrimSpace(parts[0])
+			}
+		}
+		return raw
+	}
+	host := strings.TrimSpace(r.RemoteAddr)
+	if strings.Contains(host, ":") {
+		if parsedHost, _, err := net.SplitHostPort(host); err == nil {
+			return parsedHost
+		}
+	}
+	return host
+}
+
+func buildAuditLocation(r *http.Request) string {
+	if strings.TrimSpace(r.URL.RawQuery) == "" {
+		return r.URL.Path
+	}
+	return r.URL.Path + "?" + r.URL.RawQuery
+}
+
+func shouldSkipAuditLog(path string) bool {
+	return path == "/api/me"
+}
+
+func buildAuditEventType(r *http.Request) string {
+	path := r.URL.Path
+	switch {
+	case path == "/api/login":
+		return "auth.login"
+	case path == "/oauth2callback":
+		return "auth.oauth_callback"
+	case path == "/api/logout":
+		return "auth.logout"
+	case path == "/api/notify-all":
+		return "accounts.notify_all"
+	case path == "/api/accounts/export-docx":
+		return "accounts.export_docx"
+	case path == "/api/notification-logs":
+		return "notifications.list"
+	case path == "/api/operation-logs":
+		return "audit.list"
+	case path == "/api/creator-backfill":
+		return "admin.creator_backfill"
+	case path == "/api/dashboard-providers":
+		return "dashboard.providers.list"
+	case path == "/api/dashboard-records":
+		return "dashboard.records.list"
+	case path == "/api/dashboard-forms/reorder":
+		return "dashboard.forms.reorder"
+	case path == "/api/dashboard-forms":
+		return "dashboard.forms." + methodAction(r.Method)
+	case strings.HasPrefix(path, "/api/dashboard-forms/"):
+		return "dashboard.forms." + methodAction(r.Method)
+	case path == "/api/accounts":
+		return "accounts." + methodAction(r.Method)
+	case strings.HasPrefix(path, "/api/accounts/") && strings.HasSuffix(path, "/notify"):
+		return "accounts.notify"
+	case strings.HasPrefix(path, "/api/accounts/"):
+		return "accounts." + methodAction(r.Method)
+	case path == "/api/platform-requests":
+		return "platform_requests." + methodAction(r.Method)
+	case strings.HasPrefix(path, "/api/platform-requests/") && strings.HasSuffix(path, "/export-docx"):
+		return "platform_requests.export_docx"
+	case strings.HasPrefix(path, "/api/platform-requests/") && strings.HasSuffix(path, "/export-pdf"):
+		return "platform_requests.export_pdf"
+	case strings.HasPrefix(path, "/api/platform-requests/"):
+		return "platform_requests." + methodAction(r.Method)
+	case path == "/api/firewall-requests":
+		return "firewall_requests." + methodAction(r.Method)
+	case strings.HasPrefix(path, "/api/firewall-requests/"):
+		return "firewall_requests." + methodAction(r.Method)
+	case path == "/api/asset-inventory":
+		return "asset_inventory." + methodAction(r.Method)
+	case path == "/api/asset-inventory/import-xlsx":
+		return "asset_inventory.import_xlsx"
+	case path == "/api/asset-inventory/export-xlsx":
+		return "asset_inventory.export_xlsx"
+	case path == "/api/asset-inventory/export-docx":
+		return "asset_inventory.export_docx"
+	case path == "/api/asset-inventory/export-pdf":
+		return "asset_inventory.export_pdf"
+	case strings.HasPrefix(path, "/api/asset-inventory/"):
+		return "asset_inventory." + methodAction(r.Method)
+	case path == "/api/protection-baselines":
+		return "protection_baselines." + methodAction(r.Method)
+	case path == "/api/protection-baselines/template":
+		return "protection_baselines.template"
+	case strings.HasPrefix(path, "/api/protection-baselines/") && strings.HasSuffix(path, "/export-xlsx"):
+		return "protection_baselines.export_xlsx"
+	case strings.HasPrefix(path, "/api/protection-baselines/"):
+		return "protection_baselines." + methodAction(r.Method)
+	default:
+		return "http." + strings.ToLower(r.Method) + "." + strconv.Itoa(len(path))
+	}
+}
+
+func methodAction(method string) string {
+	switch method {
+	case http.MethodGet:
+		return "read"
+	case http.MethodPost:
+		return "create"
+	case http.MethodPut:
+		return "update"
+	case http.MethodDelete:
+		return "delete"
+	default:
+		return strings.ToLower(method)
+	}
 }
