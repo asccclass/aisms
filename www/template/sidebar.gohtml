@@ -1,0 +1,39 @@
+{{ define "sidebar" }}
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <h1>🔐 ISMS 資訊資產<br>管理系統</h1>
+  </div>
+  <nav>
+    {{ range .NavItems }}
+    <a class="nav-item {{ if .IsActive }}active{{ end }}" href="{{ .Href }}">
+      <span class="icon">{{ .Icon }}</span> {{ .Label }}
+    </a>
+    {{ end }}
+  </nav>
+  <button class="logout-btn" onclick="logout()">登出</button>
+  <div class="sidebar-footer">v1.4 · 2026</div>
+</aside>
+{{ end }}
+
+{{ define "shared_ui" }}
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-box">
+    <h4 id="confirm-title">⚠️ 確認刪除</h4>
+    <p id="confirm-msg">確定要刪除此帳號嗎？此操作無法復原。</p>
+    <div class="btns">
+      <button class="btn btn-ghost" id="confirm-cancel" onclick="closeConfirm()">取消</button>
+      <button class="btn btn-danger" id="confirm-ok" onclick="confirmOk()">確定刪除</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<div class="login-overlay" id="login-overlay">
+  <div class="login-box">
+    <h2>🔐 ISMS 系統登入</h2>
+    <p style="color:var(--text-muted); margin-bottom: 20px;">本系統僅限授權人員存取</p>
+    <button class="btn btn-primary" onclick="window.location.href='/api/login'">透過 Google 登入</button>
+  </div>
+</div>
+{{ end }}
