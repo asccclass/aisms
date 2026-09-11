@@ -339,11 +339,14 @@
       <button class="nav-item active" onclick="showPage('dashboard', event)">
         <span class="icon">📊</span> 儀表板
       </button>
+      <button class="nav-item" onclick="showPage('asset-inventory', event)">
+        <span class="icon">📦</span> 04-008資訊資產清冊
+      </button>
       <button class="nav-item" onclick="window.location.href='/firewall-requests.html'">
         <span class="icon">🔥</span> 04-042防火牆申請
       </button>
-      <button class="nav-item" onclick="showPage('asset-inventory', event)">
-        <span class="icon">📦</span> 04-008資訊資產清冊
+      <button class="nav-item" onclick="window.location.href='/application-change-requests.html'">
+        <span class="icon">📝</span> 04-052功能需求更新
       </button>
       <button class="nav-item" onclick="showPage('accounts', event)">
         <span class="icon">👤</span> 04-062特殊權限帳號管理
@@ -486,6 +489,7 @@
             <tr>
               <th>#ID</th>
               <th>系統 / 編號</th>
+              <th>環境</th>
               <th>資產類別 / 名稱</th>
               <th>管理者 / 使用者</th>
               <th>存放位置</th>
