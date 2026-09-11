@@ -1,6 +1,6 @@
 (function () {
   const modalRootId = 'feature-asset-inventory-modal-root';
-  const modalPartialPath = '/partials/asset-inventory-modal.html';
+  const modalPartialPath = '/partials/asset-inventory-modal.html?v=20260911-environment';
   const fields = [
     'system_name', 'environment', 'asset_code', 'asset_type', 'asset_name', 'vendor_name',
     'is_core_asset', 'has_national_security_concern', 'asset_description', 'quantity',
