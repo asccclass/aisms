@@ -7,6 +7,19 @@ const { chromium } = require('playwright');
     { name: 'admin_email', value: 'andyliu%2540as.edu.tw', domain: 'localhost', path: '/' },
     { name: 'admin_name', value: 'Andy', domain: 'localhost', path: '/' }
   ]);
+  let tempPlatformId = null;
+  const tempPlatform = await page.request.post('http://localhost:8090/api/platform-requests', {
+    data: {
+      request_date: '2026-09-11',
+      applicant_name: 'Graph Verify',
+      system_name: 'Graph 驗證應用系統',
+      ip_restriction: '10.109.229.48/32',
+      status: 'active'
+    }
+  });
+  if (tempPlatform.ok()) {
+    tempPlatformId = (await tempPlatform.json()).id;
+  }
   await page.goto('http://localhost:8090/firewall-graph', { waitUntil: 'networkidle' });
   await page.waitForTimeout(2500);
   const result = await page.evaluate(() => {
@@ -30,6 +43,7 @@ const { chromium } = require('playwright');
       nodes: document.getElementById('graph-node-count').textContent,
       edges: document.getElementById('graph-edge-count').textContent,
       rules: document.getElementById('graph-rule-count').textContent,
+      renamedIPNodes: window.__firewallGraphDebug.renamedIPNodeCount(),
       canvasWidth: canvas.width,
       canvasHeight: canvas.height,
       nonBackground
@@ -57,10 +71,14 @@ const { chromium } = require('playwright');
   console.log(JSON.stringify(selectedResult, null, 2));
   console.log(JSON.stringify(dragResult, null, 2));
   console.log(JSON.stringify(result, null, 2));
+  if (tempPlatformId) {
+    await page.request.delete(`http://localhost:8090/api/platform-requests/${tempPlatformId}`);
+  }
   await page.screenshot({ path: 'logs/firewall-graph-verification.png', fullPage: true });
   await browser.close();
   if (
     !Number(result.rules) ||
+    result.renamedIPNodes < 1 ||
     result.nonBackground < 50 ||
     selectedResult.visibleNodes >= Number(result.nodes) ||
     dragResult.visibleNodes !== selectedResult.visibleNodes ||

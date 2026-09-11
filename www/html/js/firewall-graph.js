@@ -4,8 +4,11 @@ const esc = window.esc || (value => String(value ?? ''));
 const escAttr = window.escAttr || esc;
 const canvas = document.getElementById('firewall-graph-canvas');
 const details = document.getElementById('graph-details');
+const tooltip = document.getElementById('graph-tooltip');
 const graph = {
   records: [],
+  platformRequests: [],
+  platformIPMap: new Map(),
   nodes: [],
   edges: [],
   nodeMap: new Map(),
@@ -27,9 +30,14 @@ const graph = {
 
 window.loadFirewallGraph = async function loadFirewallGraph() {
   try {
-    const response = await fetch(API + '/api/firewall-requests');
-    if (!response.ok) throw new Error('load failed');
-    graph.records = await response.json();
+    const [firewallResponse, platformResponse] = await Promise.all([
+      fetch(API + '/api/firewall-requests'),
+      fetch(API + '/api/platform-requests')
+    ]);
+    if (!firewallResponse.ok || !platformResponse.ok) throw new Error('load failed');
+    graph.records = await firewallResponse.json();
+    graph.platformRequests = await platformResponse.json();
+    graph.platformIPMap = buildPlatformIPMap(graph.platformRequests || []);
     buildGraph(graph.records || []);
     initScene();
     renderDetails();
@@ -73,7 +81,8 @@ window.selectFirewallGraphNode = function selectFirewallGraphNode(nodeId) {
 
 window.__firewallGraphDebug = {
   visibleNodeCount: () => graph.nodes.filter(node => node.mesh?.visible).length,
-  visibleEdgeCount: () => graph.edges.filter(edge => edge.line?.visible).length
+  visibleEdgeCount: () => graph.edges.filter(edge => edge.line?.visible).length,
+  renamedIPNodeCount: () => graph.nodes.filter(node => node.originalName && node.originalName !== node.name).length
 };
 
 function buildGraph(records) {
@@ -84,11 +93,11 @@ function buildGraph(records) {
 
   records.forEach(record => {
     const systemName = normalizeName(record.system_name, '未命名主機');
-    const sourceName = normalizeName(record.source_ip || record.source_zone, '未知來源');
-    const destinationName = normalizeName(record.destination_ip || record.destination_zone, '未知目的');
+    const sourceInfo = resolveEndpointNode(record.source_ip, record.source_zone, '未知來源');
+    const destinationInfo = resolveEndpointNode(record.destination_ip, record.destination_zone, '未知目的');
     const system = getNode(systemName, 'host');
-    const source = getNode(sourceName, 'source');
-    const destination = getNode(destinationName, 'destination');
+    const source = getNode(sourceInfo.keyName, 'source', sourceInfo.displayName, sourceInfo.originalName);
+    const destination = getNode(destinationInfo.keyName, 'destination', destinationInfo.displayName, destinationInfo.originalName);
 
     system.rules.push(record);
     source.rules.push(record);
@@ -108,18 +117,56 @@ function normalizeName(value, fallback) {
   return text || fallback;
 }
 
-function getNode(name, type) {
-  const key = `${type}:${name}`;
+function buildPlatformIPMap(platformRequests) {
+  const result = new Map();
+  platformRequests.forEach(item => {
+    const systemName = normalizeName(item.system_name, '');
+    if (!systemName) return;
+    extractIPs(item.ip_restriction).forEach(ip => {
+      if (!result.has(ip)) result.set(ip, systemName);
+    });
+  });
+  return result;
+}
+
+function extractIPs(value) {
+  const matches = String(value || '').match(/\b(?:\d{1,3}\.){3}\d{1,3}(?:\/\d{1,2})?\b/g) || [];
+  return matches.flatMap(ip => {
+    const normalized = ip.trim();
+    const base = normalized.split('/')[0];
+    return normalized === base ? [base] : [normalized, base];
+  });
+}
+
+function resolveEndpointNode(ipValue, zoneValue, fallback) {
+  const endpoint = normalizeName(ipValue || zoneValue, fallback);
+  const ipCandidates = extractIPs(endpoint);
+  const matchedIP = ipCandidates.find(ip => graph.platformIPMap.has(ip));
+  if (!matchedIP) {
+    return { keyName: endpoint, displayName: endpoint, originalName: '' };
+  }
+  return {
+    keyName: endpoint,
+    displayName: graph.platformIPMap.get(matchedIP),
+    originalName: endpoint
+  };
+}
+
+function getNode(keyName, type, displayName = keyName, originalName = '') {
+  const name = normalizeName(displayName, keyName);
+  const key = `${type}:${keyName}`;
   if (graph.nodeMap.has(key)) return graph.nodeMap.get(key);
   const node = {
     id: key,
     name,
+    keyName,
+    originalName,
     type,
     rules: [],
     position: new THREE.Vector3(),
     mesh: null,
     label: null,
-    searchText: `${name} ${type}`.toLowerCase()
+    searchText: `${name} ${keyName} ${originalName} ${type}`.toLowerCase()
   };
   graph.nodeMap.set(key, node);
   graph.nodes.push(node);
@@ -256,6 +303,7 @@ function bindEvents() {
     canvas.setPointerCapture(event.pointerId);
   };
   canvas.onpointermove = event => {
+    updateNodeTooltip(event);
     if (!graph.dragging) return;
     const dx = event.clientX - graph.lastPointer.x;
     const dy = event.clientY - graph.lastPointer.y;
@@ -273,16 +321,9 @@ function bindEvents() {
     graph.dragging = false;
     canvas.releasePointerCapture(event.pointerId);
     if (wasDrag) return;
-    const rect = canvas.getBoundingClientRect();
-    graph.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    graph.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    graph.raycaster.setFromCamera(graph.pointer, graph.camera);
-    const visibleMeshes = graph.nodes
-      .filter(node => node.mesh?.visible)
-      .map(node => node.mesh);
-    const hit = graph.raycaster.intersectObjects(visibleMeshes)[0];
-    if (!hit) return;
-    graph.selected = hit.object.userData.node;
+    const node = pickNodeAt(event.clientX, event.clientY);
+    if (!node) return;
+    graph.selected = node;
     applyGraphVisibility();
     renderDetails();
   };
@@ -291,6 +332,40 @@ function bindEvents() {
     graph.distance = Math.max(180, Math.min(1200, graph.distance + event.deltaY * 0.35));
     updateCamera();
   };
+  canvas.onpointerleave = () => hideNodeTooltip();
+}
+
+function updateNodeTooltip(event) {
+  if (!tooltip || graph.dragging || !graph.camera) {
+    hideNodeTooltip();
+    return;
+  }
+  const node = pickNodeAt(event.clientX, event.clientY);
+  if (!node || !node.originalName) {
+    hideNodeTooltip();
+    return;
+  }
+  const rect = canvas.parentElement.getBoundingClientRect();
+  tooltip.style.display = 'block';
+  tooltip.style.left = `${event.clientX - rect.left + 14}px`;
+  tooltip.style.top = `${event.clientY - rect.top + 14}px`;
+  tooltip.innerHTML = `<strong>${esc(node.name)}</strong><br>IP：${esc(node.originalName)}`;
+}
+
+function hideNodeTooltip() {
+  if (tooltip) tooltip.style.display = 'none';
+}
+
+function pickNodeAt(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  graph.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+  graph.pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  graph.raycaster.setFromCamera(graph.pointer, graph.camera);
+  const visibleMeshes = graph.nodes
+    .filter(node => node.mesh?.visible)
+    .map(node => node.mesh);
+  const hit = graph.raycaster.intersectObjects(visibleMeshes)[0];
+  return hit ? hit.object.userData.node : null;
 }
 
 function resize() {
@@ -350,7 +425,8 @@ function renderDetails(keyword = '') {
     return;
   }
   const rules = graph.selected.rules.slice(0, 20);
-  details.innerHTML = `<h3>${esc(graph.selected.name)}</h3><p class="hint">${graph.selected.rules.length} 筆關聯規則</p>
+  const ipInfo = graph.selected.originalName ? `<p class="hint">IP：${esc(graph.selected.originalName)}</p>` : '';
+  details.innerHTML = `<h3>${esc(graph.selected.name)}</h3>${ipInfo}<p class="hint">${graph.selected.rules.length} 筆關聯規則</p>
     <button class="node-item active" onclick="resetFirewallGraphView()">顯示全部節點</button>
     <div class="rule-list">${rules.map(rule => `<div class="rule-item">
       <strong>${esc(rule.system_name || '未命名主機')}</strong><br>
