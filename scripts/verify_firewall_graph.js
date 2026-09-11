@@ -46,11 +46,26 @@ const { chromium } = require('playwright');
       visibleEdges
     };
   });
+  await page.mouse.move(420, 360);
+  await page.mouse.down();
+  await page.mouse.move(520, 430);
+  await page.mouse.up();
+  const dragResult = await page.evaluate(() => ({
+    visibleNodes: window.__firewallGraphDebug.visibleNodeCount(),
+    visibleEdges: window.__firewallGraphDebug.visibleEdgeCount()
+  }));
   console.log(JSON.stringify(selectedResult, null, 2));
+  console.log(JSON.stringify(dragResult, null, 2));
   console.log(JSON.stringify(result, null, 2));
   await page.screenshot({ path: 'logs/firewall-graph-verification.png', fullPage: true });
   await browser.close();
-  if (!Number(result.rules) || result.nonBackground < 50 || selectedResult.visibleNodes >= Number(result.nodes)) {
+  if (
+    !Number(result.rules) ||
+    result.nonBackground < 50 ||
+    selectedResult.visibleNodes >= Number(result.nodes) ||
+    dragResult.visibleNodes !== selectedResult.visibleNodes ||
+    dragResult.visibleEdges !== selectedResult.visibleEdges
+  ) {
     process.exit(1);
   }
 })();

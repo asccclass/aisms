@@ -20,7 +20,9 @@ const graph = {
   rotation: { x: -0.24, y: 0.42 },
   distance: 560,
   dragging: false,
-  lastPointer: { x: 0, y: 0 }
+  lastPointer: { x: 0, y: 0 },
+  pointerDown: { x: 0, y: 0 },
+  pointerMoved: false
 };
 
 window.loadFirewallGraph = async function loadFirewallGraph() {
@@ -248,6 +250,8 @@ function bindEvents() {
   window.addEventListener('resize', resize);
   canvas.onpointerdown = event => {
     graph.dragging = true;
+    graph.pointerMoved = false;
+    graph.pointerDown = { x: event.clientX, y: event.clientY };
     graph.lastPointer = { x: event.clientX, y: event.clientY };
     canvas.setPointerCapture(event.pointerId);
   };
@@ -255,6 +259,9 @@ function bindEvents() {
     if (!graph.dragging) return;
     const dx = event.clientX - graph.lastPointer.x;
     const dy = event.clientY - graph.lastPointer.y;
+    if (Math.hypot(event.clientX - graph.pointerDown.x, event.clientY - graph.pointerDown.y) > 4) {
+      graph.pointerMoved = true;
+    }
     graph.rotation.y += dx * 0.006;
     graph.rotation.x += dy * 0.006;
     graph.rotation.x = Math.max(-1.25, Math.min(1.25, graph.rotation.x));
@@ -262,16 +269,20 @@ function bindEvents() {
     updateCamera();
   };
   canvas.onpointerup = event => {
+    const wasDrag = graph.pointerMoved;
     graph.dragging = false;
     canvas.releasePointerCapture(event.pointerId);
-  };
-  canvas.onclick = event => {
+    if (wasDrag) return;
     const rect = canvas.getBoundingClientRect();
     graph.pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     graph.pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     graph.raycaster.setFromCamera(graph.pointer, graph.camera);
-    const hit = graph.raycaster.intersectObjects(graph.nodes.map(node => node.mesh))[0];
-    graph.selected = hit ? hit.object.userData.node : null;
+    const visibleMeshes = graph.nodes
+      .filter(node => node.mesh?.visible)
+      .map(node => node.mesh);
+    const hit = graph.raycaster.intersectObjects(visibleMeshes)[0];
+    if (!hit) return;
+    graph.selected = hit.object.userData.node;
     applyGraphVisibility();
     renderDetails();
   };
