@@ -67,7 +67,8 @@ func buildAssetInventoryRecordXML(idx int, record models.AssetInventoryRecord) s
 func buildAssetInventoryTableXML(record models.AssetInventoryRecord) string {
 	return `<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/><w:tblBorders><w:top w:val="single" w:sz="8" w:space="0" w:color="auto"/><w:left w:val="single" w:sz="8" w:space="0" w:color="auto"/><w:bottom w:val="single" w:sz="8" w:space="0" w:color="auto"/><w:right w:val="single" w:sz="8" w:space="0" w:color="auto"/><w:insideH w:val="single" w:sz="6" w:space="0" w:color="auto"/><w:insideV w:val="single" w:sz="6" w:space="0" w:color="auto"/></w:tblBorders><w:tblCellMar><w:top w:w="80" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="1800"/><w:gridCol w:w="3200"/><w:gridCol w:w="1800"/><w:gridCol w:w="3200"/><w:gridCol w:w="1800"/><w:gridCol w:w="3200"/></w:tblGrid>` +
 		tableRowXML(labelCell("資通系統名稱", 1), valueCell(record.SystemName, 5)) +
-		tableRowXML(labelCell("資產編號", 1), valueCell(record.AssetCode, 1), labelCell("資產類別", 1), valueCell(record.AssetType, 1), labelCell("資產名稱", 1), valueCell(record.AssetName, 1)) +
+		tableRowXML(labelCell("環境", 1), valueCell(record.Environment, 1), labelCell("資產編號", 1), valueCell(record.AssetCode, 1), labelCell("資產類別", 1), valueCell(record.AssetType, 1)) +
+		tableRowXML(labelCell("資產名稱", 1), valueCell(record.AssetName, 5)) +
 		tableRowXML(labelCell("廠牌/廠商", 1), valueCell(record.VendorName, 5)) +
 		tableRowXML(labelCell("核心資產", 1), valueCell(record.IsCoreAsset, 1), labelCell("國安疑慮", 1), valueCell(record.HasNationalSecurityConcern, 1), labelCell("數量", 1), valueCell(record.Quantity, 1)) +
 		tableRowXML(labelCell("資產說明", 1), valueCell(record.AssetDescription, 5)) +

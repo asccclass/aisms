@@ -224,6 +224,9 @@ func (h *Handler) CreateAssetInventoryRecord(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	req.Creator = GetUserEmail(r)
+	if strings.TrimSpace(req.Environment) == "" {
+		req.Environment = "正式"
+	}
 	if strings.TrimSpace(req.Status) == "" {
 		req.Status = "active"
 	}
@@ -254,6 +257,9 @@ func (h *Handler) UpdateAssetInventoryRecord(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	req.Creator = existing.Creator
+	if strings.TrimSpace(req.Environment) == "" {
+		req.Environment = "正式"
+	}
 	if err := h.DB.UpdateAssetInventoryRecord(&req); err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
@@ -314,6 +320,18 @@ func (h *Handler) ImportAssetInventoryXLSX(w http.ResponseWriter, r *http.Reques
 
 	imported := 0
 	skipped := 0
+	hasEnvironmentColumn := false
+	for i := 0; i < len(rows) && i < 7; i++ {
+		for _, cell := range rows[i] {
+			if strings.TrimSpace(cell) == "環境" {
+				hasEnvironmentColumn = true
+				break
+			}
+		}
+		if hasEnvironmentColumn {
+			break
+		}
+	}
 	for i := 7; i < len(rows); i++ {
 		row := rows[i]
 		get := func(idx int) string {
@@ -322,37 +340,44 @@ func (h *Handler) ImportAssetInventoryXLSX(w http.ResponseWriter, r *http.Reques
 			}
 			return ""
 		}
+		envOffset := 0
+		environment := "正式"
+		if hasEnvironmentColumn {
+			envOffset = 1
+			environment = firstNonEmpty(get(1), "正式")
+		}
 		record := models.AssetInventoryRecord{
 			SystemName:                 get(0),
-			AssetCode:                  get(1),
-			AssetType:                  get(2),
-			AssetName:                  get(3),
-			VendorName:                 get(4),
-			IsCoreAsset:                firstNonEmpty(get(5), "否"),
-			HasNationalSecurityConcern: firstNonEmpty(get(6), "否"),
-			AssetDescription:           get(7),
-			Quantity:                   firstNonEmpty(get(8), "1"),
-			OsConfigBaseline:           get(9),
-			BrowserConfigBaseline:      get(10),
-			NetworkConfigBaseline:      get(11),
-			ApplicationConfigBaseline:  get(12),
-			OtherConfigBaseline:        get(13),
-			ConfigExceptionCode:        get(14),
-			ManagerDepartment:          get(15),
-			UserDepartment:             get(16),
-			Location:                   get(17),
-			Confidentiality:            get(18),
-			Integrity:                  get(19),
-			Availability:               get(20),
-			AssetValue:                 get(21),
-			LegalCompliance:            get(23),
-			ProtectionLevel:            get(24),
-			Mtpd:                       get(25),
-			Rto:                        get(26),
-			Rpo:                        get(27),
+			Environment:                environment,
+			AssetCode:                  get(1 + envOffset),
+			AssetType:                  get(2 + envOffset),
+			AssetName:                  get(3 + envOffset),
+			VendorName:                 get(4 + envOffset),
+			IsCoreAsset:                firstNonEmpty(get(5+envOffset), "否"),
+			HasNationalSecurityConcern: firstNonEmpty(get(6+envOffset), "否"),
+			AssetDescription:           get(7 + envOffset),
+			Quantity:                   firstNonEmpty(get(8+envOffset), "1"),
+			OsConfigBaseline:           get(9 + envOffset),
+			BrowserConfigBaseline:      get(10 + envOffset),
+			NetworkConfigBaseline:      get(11 + envOffset),
+			ApplicationConfigBaseline:  get(12 + envOffset),
+			OtherConfigBaseline:        get(13 + envOffset),
+			ConfigExceptionCode:        get(14 + envOffset),
+			ManagerDepartment:          get(15 + envOffset),
+			UserDepartment:             get(16 + envOffset),
+			Location:                   get(17 + envOffset),
+			Confidentiality:            get(18 + envOffset),
+			Integrity:                  get(19 + envOffset),
+			Availability:               get(20 + envOffset),
+			AssetValue:                 get(21 + envOffset),
+			LegalCompliance:            get(23 + envOffset),
+			ProtectionLevel:            get(24 + envOffset),
+			Mtpd:                       get(25 + envOffset),
+			Rto:                        get(26 + envOffset),
+			Rpo:                        get(27 + envOffset),
 			Status:                     "active",
 			Creator:                    GetUserEmail(r),
-			Remarks:                    get(28),
+			Remarks:                    get(28 + envOffset),
 		}
 		if record.SystemName == "" && record.AssetCode == "" && record.AssetName == "" {
 			skipped++
@@ -383,7 +408,7 @@ func (h *Handler) ExportAssetInventoryXLSX(w http.ResponseWriter, r *http.Reques
 	f.SetSheetName("Sheet1", sheetName)
 
 	headers := []string{
-		"資通系統名稱", "資產編號", "資產類別", "資產名稱", "廠牌/廠商",
+		"資通系統名稱", "環境", "資產編號", "資產類別", "資產名稱", "廠牌/廠商",
 		"是否為核心系統及其相關資產", "是否具危害國家資通安全疑慮？", "資產說明", "數量",
 		"作業系統組態基準編號", "瀏覽器組態基準編號", "網通設備組態基準編號", "應用程式組態基準編號",
 		"其他組態基準編號", "組態例外編號", "管理者(部門)", "使用者(部門)", "存放位置",
@@ -397,7 +422,7 @@ func (h *Handler) ExportAssetInventoryXLSX(w http.ResponseWriter, r *http.Reques
 
 	for i, row := range rows {
 		values := []string{
-			row.SystemName, row.AssetCode, row.AssetType, row.AssetName, row.VendorName,
+			row.SystemName, row.Environment, row.AssetCode, row.AssetType, row.AssetName, row.VendorName,
 			row.IsCoreAsset, row.HasNationalSecurityConcern, row.AssetDescription, row.Quantity,
 			row.OsConfigBaseline, row.BrowserConfigBaseline, row.NetworkConfigBaseline, row.ApplicationConfigBaseline,
 			row.OtherConfigBaseline, row.ConfigExceptionCode, row.ManagerDepartment, row.UserDepartment, row.Location,
@@ -1178,6 +1203,9 @@ func (h *Handler) loadAssetInventoryDashboardRecords(creator string) ([]models.D
 			secondary = row.AssetType
 		} else {
 			secondary = fmt.Sprintf("%s / %s", row.AssetCode, row.AssetType)
+		}
+		if strings.TrimSpace(row.Environment) != "" {
+			secondary = fmt.Sprintf("%s / %s", row.Environment, secondary)
 		}
 		records = append(records, models.DashboardRecord{
 			ID:            row.ID,

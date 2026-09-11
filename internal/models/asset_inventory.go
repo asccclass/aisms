@@ -6,6 +6,7 @@ import "time"
 type AssetInventoryRecord struct {
 	ID                         int       `json:"id"`
 	SystemName                 string    `json:"system_name"`
+	Environment                string    `json:"environment"`
 	AssetCode                  string    `json:"asset_code"`
 	AssetType                  string    `json:"asset_type"`
 	AssetName                  string    `json:"asset_name"`

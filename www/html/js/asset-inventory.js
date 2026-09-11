@@ -2,7 +2,7 @@
   const modalRootId = 'feature-asset-inventory-modal-root';
   const modalPartialPath = '/partials/asset-inventory-modal.html';
   const fields = [
-    'system_name', 'asset_code', 'asset_type', 'asset_name', 'vendor_name',
+    'system_name', 'environment', 'asset_code', 'asset_type', 'asset_name', 'vendor_name',
     'is_core_asset', 'has_national_security_concern', 'asset_description', 'quantity',
     'os_config_baseline', 'browser_config_baseline', 'network_config_baseline',
     'application_config_baseline', 'other_config_baseline', 'config_exception_code',
@@ -65,13 +65,14 @@
     const tbody = document.getElementById('asset-inventory-body');
     if (!tbody) return;
     if (!list || !list.length) {
-      tbody.innerHTML = `<tr><td colspan="10"><div class="empty"><div class="icon">📦</div><p>尚無資訊資產資料</p></div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="11"><div class="empty"><div class="icon">📦</div><p>尚無資訊資產資料</p></div></td></tr>`;
       return;
     }
     tbody.innerHTML = list.map(item => `
       <tr>
         <td style="color:var(--text-muted);font-size:12px;">#${item.id}</td>
         <td>${esc(item.system_name)}<br><span class="hint">${esc(item.asset_code || '—')}</span></td>
+        <td>${esc(item.environment || '正式')}</td>
         <td>${esc(item.asset_type)}<br><span class="hint">${esc(item.asset_name)}</span></td>
         <td>${esc(item.manager_department)}<br><span class="hint">${esc(item.user_department)}</span></td>
         <td>${esc(item.location)}</td>
@@ -112,6 +113,7 @@
       const el = document.getElementById('ai-' + field);
       if (el) el.value = '';
     });
+    document.getElementById('ai-environment').value = '正式';
     document.getElementById('ai-asset_type').value = '實體類';
     document.getElementById('ai-is_core_asset').value = '否';
     document.getElementById('ai-has_national_security_concern').value = '否';
