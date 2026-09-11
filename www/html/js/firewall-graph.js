@@ -41,21 +41,37 @@ window.resetFirewallGraphView = function resetFirewallGraphView() {
   graph.distance = 560;
   graph.selected = null;
   updateCamera();
-  highlightSelection();
+  applyGraphVisibility();
   renderDetails();
 };
 
 window.filterFirewallGraph = function filterFirewallGraph(keyword) {
   const q = String(keyword || '').trim().toLowerCase();
+  if (!graph.selected) renderDetails(q);
   graph.nodes.forEach(node => {
+    const related = isNodeVisibleForSelection(node);
     const matched = !q || node.searchText.includes(q);
-    node.mesh.material.opacity = matched ? 1 : 0.18;
-    node.label.material.opacity = matched ? 0.92 : 0.16;
+    const visible = related && matched;
+    node.mesh.visible = visible;
+    node.label.visible = visible;
   });
   graph.edges.forEach(edge => {
+    const related = isEdgeVisibleForSelection(edge);
     const matched = !q || edge.searchText.includes(q);
-    edge.line.material.opacity = matched ? 0.55 : 0.08;
+    edge.line.visible = related && matched;
   });
+};
+
+window.selectFirewallGraphNode = function selectFirewallGraphNode(nodeId) {
+  graph.selected = graph.nodeMap.get(nodeId) || null;
+  document.getElementById('graph-search').value = '';
+  applyGraphVisibility();
+  renderDetails();
+};
+
+window.__firewallGraphDebug = {
+  visibleNodeCount: () => graph.nodes.filter(node => node.mesh?.visible).length,
+  visibleEdgeCount: () => graph.edges.filter(edge => edge.line?.visible).length
 };
 
 function buildGraph(records) {
@@ -256,7 +272,7 @@ function bindEvents() {
     graph.raycaster.setFromCamera(graph.pointer, graph.camera);
     const hit = graph.raycaster.intersectObjects(graph.nodes.map(node => node.mesh))[0];
     graph.selected = hit ? hit.object.userData.node : null;
-    highlightSelection();
+    applyGraphVisibility();
     renderDetails();
   };
   canvas.onwheel = event => {
@@ -282,29 +298,49 @@ function updateCamera() {
   graph.camera.lookAt(0, 0, 0);
 }
 
-function highlightSelection() {
+function applyGraphVisibility() {
   graph.nodes.forEach(node => {
+    const visible = isNodeVisibleForSelection(node);
+    node.mesh.visible = visible;
+    node.label.visible = visible;
     const selected = graph.selected && node.id === graph.selected.id;
     node.mesh.material.emissiveIntensity = selected ? 0.85 : (node.type === 'host' ? 0.34 : 0.2);
   });
   graph.edges.forEach(edge => {
-    const connected = graph.selected && (edge.from.id === graph.selected.id || edge.to.id === graph.selected.id);
-    edge.line.material.opacity = graph.selected ? (connected ? 0.9 : 0.1) : 0.48;
+    const visible = isEdgeVisibleForSelection(edge);
+    edge.line.visible = visible;
+    edge.line.material.opacity = graph.selected ? 0.9 : 0.48;
   });
 }
 
-function renderDetails() {
+function isNodeVisibleForSelection(node) {
+  if (!graph.selected) return true;
+  if (node.id === graph.selected.id) return true;
+  return graph.edges.some(edge => isEdgeVisibleForSelection(edge) && (edge.from.id === node.id || edge.to.id === node.id));
+}
+
+function isEdgeVisibleForSelection(edge) {
+  if (!graph.selected) return true;
+  return edge.from.id === graph.selected.id || edge.to.id === graph.selected.id;
+}
+
+function renderDetails(keyword = '') {
   if (!graph.records.length) {
     details.innerHTML = '<h3>尚無防火牆資料</h3><p class="hint">04-042 匯入或建立資料後，這裡會呈現關聯圖。</p>';
     return;
   }
   if (!graph.selected) {
-    details.innerHTML = `<h3>防火牆關聯概覽</h3><p class="hint">拖曳旋轉、滾輪縮放，點選節點查看關聯規則。</p>
-      <div class="rule-list">${graph.nodes.slice(0, 10).map(node => `<div class="rule-item"><strong>${esc(node.name)}</strong><br><span class="hint">${node.rules.length} 筆關聯規則</span></div>`).join('')}</div>`;
+    const q = String(keyword || '').trim().toLowerCase();
+    const nodes = graph.nodes
+      .filter(node => !q || node.searchText.includes(q))
+      .sort((a, b) => b.rules.length - a.rules.length || a.name.localeCompare(b.name, 'zh-Hant'));
+    details.innerHTML = `<h3>節點清單</h3><p class="hint">點選節點後，圖上只會保留該節點的相關連線。</p>
+      <div class="rule-list">${nodes.map(node => `<button class="node-item" onclick="selectFirewallGraphNode('${escAttr(node.id)}')"><strong>${esc(node.name)}</strong><br><span class="hint">${node.rules.length} 筆關聯規則</span></button>`).join('')}</div>`;
     return;
   }
   const rules = graph.selected.rules.slice(0, 20);
   details.innerHTML = `<h3>${esc(graph.selected.name)}</h3><p class="hint">${graph.selected.rules.length} 筆關聯規則</p>
+    <button class="node-item active" onclick="resetFirewallGraphView()">顯示全部節點</button>
     <div class="rule-list">${rules.map(rule => `<div class="rule-item">
       <strong>${esc(rule.system_name || '未命名主機')}</strong><br>
       <span class="hint">${esc(rule.source_ip)} → ${esc(rule.destination_ip)}</span><br>
@@ -315,6 +351,5 @@ function renderDetails() {
 
 function animate() {
   requestAnimationFrame(animate);
-  if (graph.group && !graph.dragging) graph.group.rotation.z += 0.0008;
   graph.renderer.render(graph.scene, graph.camera);
 }

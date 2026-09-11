@@ -38,7 +38,9 @@
   .details { min-height:0; overflow:auto; color:var(--text); font-size:13px; line-height:1.6; }
   .details h3 { color:var(--primary); font-size:16px; margin-bottom:6px; }
   .rule-list { display:grid; gap:8px; margin-top:10px; }
-  .rule-item { border:1px solid var(--border); background:#fff; border-radius:8px; padding:9px; }
+  .rule-item, .node-item { border:1px solid var(--border); background:#fff; border-radius:8px; padding:9px; }
+  .node-item { width:100%; text-align:left; color:var(--text); cursor:pointer; font:inherit; }
+  .node-item:hover, .node-item.active { border-color:var(--accent); background:#eef6ff; }
   .hint { color:var(--text-muted); font-size:12px; }
   .btn { padding:9px 14px; border-radius:8px; border:none; font-size:14px; cursor:pointer; font-weight:600; display:inline-flex; align-items:center; gap:6px; }
   .btn-ghost { background:#e2e8f0; color:var(--text); }
@@ -84,7 +86,7 @@
         <input id="graph-search" class="search-box" placeholder="搜尋主機、IP、區域" oninput="filterFirewallGraph(this.value)">
         <div class="details" id="graph-details">
           <h3>載入防火牆資料中</h3>
-          <p class="hint">完成後可拖曳旋轉、滾輪縮放，點選節點查看關聯規則。</p>
+          <p class="hint">完成後可拖曳旋轉、滾輪縮放，點選右側節點查看關聯規則。</p>
         </div>
       </aside>
     </section>

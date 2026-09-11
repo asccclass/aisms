@@ -35,10 +35,22 @@ const { chromium } = require('playwright');
       nonBackground
     };
   });
+  const selectedResult = await page.evaluate(() => {
+    const firstNode = document.querySelector('.node-item');
+    firstNode.click();
+    const visibleNodes = window.__firewallGraphDebug.visibleNodeCount();
+    const visibleEdges = window.__firewallGraphDebug.visibleEdgeCount();
+    return {
+      selectedName: document.querySelector('#graph-details h3')?.textContent || '',
+      visibleNodes,
+      visibleEdges
+    };
+  });
+  console.log(JSON.stringify(selectedResult, null, 2));
   console.log(JSON.stringify(result, null, 2));
   await page.screenshot({ path: 'logs/firewall-graph-verification.png', fullPage: true });
   await browser.close();
-  if (!Number(result.rules) || result.nonBackground < 50) {
+  if (!Number(result.rules) || result.nonBackground < 50 || selectedResult.visibleNodes >= Number(result.nodes)) {
     process.exit(1);
   }
 })();
