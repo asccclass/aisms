@@ -108,50 +108,53 @@ def load_rows(xlsx_path: Path) -> list[FirewallRow]:
     return rows
 
 
-def existing_keys(conn: sqlite3.Connection) -> set[tuple[str, ...]]:
-    cur = conn.cursor()
-    result: set[tuple[str, ...]] = set()
-    for db_row in cur.execute(
-        """
-        SELECT legacy_form_number, system_name, action, purpose_type, source_zone, source_zone2,
+def existing_key_ids(conn: sqlite3.Connection) -> dict[tuple[str, ...], list[int]]:
+	cur = conn.cursor()
+	result: dict[tuple[str, ...], list[int]] = {}
+	for db_row in cur.execute(
+		"""
+        SELECT id, legacy_form_number, system_name, action, purpose_type, source_zone, source_zone2,
                source_ip, destination_zone, destination_zone2, destination_ip, protocol_type,
                start_date, end_date, request_date, rule_description, firewall_zone, firewall_id
         FROM firewall_requests
         """
-    ):
-        row = FirewallRow(
-            legacy_form_number=db_row[0],
-            system_name=db_row[1],
-            action=db_row[2],
-            purpose_type=db_row[3],
-            source_zone=db_row[4],
-            source_zone2=db_row[5],
-            source_ip=db_row[6],
-            destination_zone=db_row[7],
-            destination_zone2=db_row[8],
-            destination_ip=db_row[9],
-            protocol_type=db_row[10],
-            start_date=db_row[11],
-            end_date=db_row[12],
-            request_date=db_row[13],
-            rule_description=db_row[14],
-            firewall_zone=db_row[15],
-            firewall_id=db_row[16],
-        )
-        result.add(dedupe_key(row))
-    return result
+	):
+		row = FirewallRow(
+			legacy_form_number=db_row[1],
+			system_name=db_row[2],
+			action=db_row[3],
+			purpose_type=db_row[4],
+			source_zone=db_row[5],
+			source_zone2=db_row[6],
+			source_ip=db_row[7],
+			destination_zone=db_row[8],
+			destination_zone2=db_row[9],
+			destination_ip=db_row[10],
+			protocol_type=db_row[11],
+			start_date=db_row[12],
+			end_date=db_row[13],
+			request_date=db_row[14],
+			rule_description=db_row[15],
+			firewall_zone=db_row[16],
+			firewall_id=db_row[17],
+		)
+		result.setdefault(dedupe_key(row), []).append(db_row[0])
+	return result
 
 
-def insert_rows(conn: sqlite3.Connection, rows: list[FirewallRow], creator: str) -> tuple[int, int]:
-    current_keys = existing_keys(conn)
+def insert_rows(conn: sqlite3.Connection, rows: list[FirewallRow], creator: str) -> tuple[int, int, int]:
+    unique_rows = {dedupe_key(row): row for row in rows}
+    current_key_ids = existing_key_ids(conn)
     inserted = 0
-    skipped = 0
+    replaced = 0
     cur = conn.cursor()
-    for row in rows:
-        key = dedupe_key(row)
-        if key in current_keys:
-            skipped += 1
+    for key, ids in current_key_ids.items():
+        if key not in unique_rows:
             continue
+        for row_id in ids:
+            cur.execute("DELETE FROM firewall_requests WHERE id=?", (row_id,))
+            replaced += 1
+    for row in unique_rows.values():
         cur.execute(
             """
             INSERT INTO firewall_requests (
@@ -182,10 +185,9 @@ def insert_rows(conn: sqlite3.Connection, rows: list[FirewallRow], creator: str)
                 creator,
             ),
         )
-        current_keys.add(key)
         inserted += 1
     conn.commit()
-    return inserted, skipped
+    return inserted, replaced, len(rows) - len(unique_rows)
 
 
 def main() -> int:
@@ -198,10 +200,10 @@ def main() -> int:
     rows = load_rows(xlsx_path)
     conn = sqlite3.connect(db_path)
     try:
-        inserted, skipped = insert_rows(conn, rows, creator)
+        inserted, replaced, excel_duplicates = insert_rows(conn, rows, creator)
     finally:
         conn.close()
-    print(f"rows={len(rows)} inserted={inserted} skipped={skipped} creator={creator}")
+    print(f"rows={len(rows)} inserted={inserted} replaced={replaced} excel_duplicates={excel_duplicates} creator={creator}")
     return 0
 
 
