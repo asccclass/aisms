@@ -8,6 +8,7 @@ type ApplicationChangeRequest struct {
 	Suggestor                 string    `json:"suggestor"`
 	FormDate                  string    `json:"form_date"`
 	Approver                  string    `json:"approver"`
+	RelatedSystem             string    `json:"related_system"`
 	SystemName                string    `json:"system_name"`
 	FeatureName               string    `json:"feature_name"`
 	IsRequiredFeature         string    `json:"is_required_feature"`

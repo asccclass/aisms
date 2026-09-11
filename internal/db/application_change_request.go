@@ -5,14 +5,14 @@ import (
 	"strings"
 )
 
-const applicationChangeRequestColumns = `id,suggestor,form_date,approver,system_name,feature_name,is_required_feature,is_major_impact,expected_online_date,background_description,existing_security_measures,security_scope_involved,access_control_measures,audit_measures,continuity_measures,identification_measures,system_acquisition_measures,communication_measures,integrity_measures,capacity_management,capacity_change_description,other_security_measures,other_security_description,information_service_opinion,meeting_time,meeting_decision,rejection_reason,coordinating_staff,coordination_date,coordination_approver,status,creator,remarks,created_at,updated_at`
+const applicationChangeRequestColumns = `id,suggestor,form_date,approver,related_system,system_name,feature_name,is_required_feature,is_major_impact,expected_online_date,background_description,existing_security_measures,security_scope_involved,access_control_measures,audit_measures,continuity_measures,identification_measures,system_acquisition_measures,communication_measures,integrity_measures,capacity_management,capacity_change_description,other_security_measures,other_security_description,information_service_opinion,meeting_time,meeting_decision,rejection_reason,coordinating_staff,coordination_date,coordination_approver,status,creator,remarks,created_at,updated_at`
 
 func scanApplicationChangeRequest(scanner interface {
 	Scan(dest ...interface{}) error
 }) (*models.ApplicationChangeRequest, error) {
 	var r models.ApplicationChangeRequest
 	err := scanner.Scan(
-		&r.ID, &r.Suggestor, &r.FormDate, &r.Approver, &r.SystemName, &r.FeatureName,
+		&r.ID, &r.Suggestor, &r.FormDate, &r.Approver, &r.RelatedSystem, &r.SystemName, &r.FeatureName,
 		&r.IsRequiredFeature, &r.IsMajorImpact, &r.ExpectedOnlineDate, &r.BackgroundDescription,
 		&r.ExistingSecurityMeasures, &r.SecurityScopeInvolved, &r.AccessControlMeasures, &r.AuditMeasures,
 		&r.ContinuityMeasures, &r.IdentificationMeasures, &r.SystemAcquisitionMeasures,
@@ -71,8 +71,8 @@ func (d *DB) GetApplicationChangeRequestByCreator(id int, creator string) (*mode
 }
 
 func (d *DB) CreateApplicationChangeRequest(r *models.ApplicationChangeRequest) (int64, error) {
-	res, err := d.conn.Exec(`INSERT INTO application_change_requests (suggestor,form_date,approver,system_name,feature_name,is_required_feature,is_major_impact,expected_online_date,background_description,existing_security_measures,security_scope_involved,access_control_measures,audit_measures,continuity_measures,identification_measures,system_acquisition_measures,communication_measures,integrity_measures,capacity_management,capacity_change_description,other_security_measures,other_security_description,information_service_opinion,meeting_time,meeting_decision,rejection_reason,coordinating_staff,coordination_date,coordination_approver,status,creator,remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		r.Suggestor, r.FormDate, r.Approver, r.SystemName, r.FeatureName, r.IsRequiredFeature,
+	res, err := d.conn.Exec(`INSERT INTO application_change_requests (suggestor,form_date,approver,related_system,system_name,feature_name,is_required_feature,is_major_impact,expected_online_date,background_description,existing_security_measures,security_scope_involved,access_control_measures,audit_measures,continuity_measures,identification_measures,system_acquisition_measures,communication_measures,integrity_measures,capacity_management,capacity_change_description,other_security_measures,other_security_description,information_service_opinion,meeting_time,meeting_decision,rejection_reason,coordinating_staff,coordination_date,coordination_approver,status,creator,remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		r.Suggestor, r.FormDate, r.Approver, r.RelatedSystem, r.SystemName, r.FeatureName, r.IsRequiredFeature,
 		r.IsMajorImpact, r.ExpectedOnlineDate, r.BackgroundDescription, r.ExistingSecurityMeasures,
 		r.SecurityScopeInvolved, r.AccessControlMeasures, r.AuditMeasures, r.ContinuityMeasures,
 		r.IdentificationMeasures, r.SystemAcquisitionMeasures, r.CommunicationMeasures,
@@ -87,8 +87,8 @@ func (d *DB) CreateApplicationChangeRequest(r *models.ApplicationChangeRequest) 
 }
 
 func (d *DB) UpdateApplicationChangeRequest(r *models.ApplicationChangeRequest) error {
-	_, err := d.conn.Exec(`UPDATE application_change_requests SET suggestor=?,form_date=?,approver=?,system_name=?,feature_name=?,is_required_feature=?,is_major_impact=?,expected_online_date=?,background_description=?,existing_security_measures=?,security_scope_involved=?,access_control_measures=?,audit_measures=?,continuity_measures=?,identification_measures=?,system_acquisition_measures=?,communication_measures=?,integrity_measures=?,capacity_management=?,capacity_change_description=?,other_security_measures=?,other_security_description=?,information_service_opinion=?,meeting_time=?,meeting_decision=?,rejection_reason=?,coordinating_staff=?,coordination_date=?,coordination_approver=?,status=?,creator=?,remarks=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`,
-		r.Suggestor, r.FormDate, r.Approver, r.SystemName, r.FeatureName, r.IsRequiredFeature,
+	_, err := d.conn.Exec(`UPDATE application_change_requests SET suggestor=?,form_date=?,approver=?,related_system=?,system_name=?,feature_name=?,is_required_feature=?,is_major_impact=?,expected_online_date=?,background_description=?,existing_security_measures=?,security_scope_involved=?,access_control_measures=?,audit_measures=?,continuity_measures=?,identification_measures=?,system_acquisition_measures=?,communication_measures=?,integrity_measures=?,capacity_management=?,capacity_change_description=?,other_security_measures=?,other_security_description=?,information_service_opinion=?,meeting_time=?,meeting_decision=?,rejection_reason=?,coordinating_staff=?,coordination_date=?,coordination_approver=?,status=?,creator=?,remarks=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+		r.Suggestor, r.FormDate, r.Approver, r.RelatedSystem, r.SystemName, r.FeatureName, r.IsRequiredFeature,
 		r.IsMajorImpact, r.ExpectedOnlineDate, r.BackgroundDescription, r.ExistingSecurityMeasures,
 		r.SecurityScopeInvolved, r.AccessControlMeasures, r.AuditMeasures, r.ContinuityMeasures,
 		r.IdentificationMeasures, r.SystemAcquisitionMeasures, r.CommunicationMeasures,

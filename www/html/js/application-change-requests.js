@@ -1,8 +1,8 @@
 (function () {
   const modalRootId = 'feature-application-change-modal-root';
-  const modalPartialPath = '/partials/application-change-request-modal.html';
+  const modalPartialPath = '/partials/application-change-request-modal.html?v=20260911-related-system';
   const fields = [
-    'suggestor', 'form_date', 'approver', 'system_name', 'feature_name',
+    'suggestor', 'form_date', 'approver', 'related_system', 'system_name', 'feature_name',
     'is_required_feature', 'is_major_impact', 'expected_online_date',
     'background_description', 'existing_security_measures', 'security_scope_involved',
     'access_control_measures', 'audit_measures', 'continuity_measures',
@@ -17,6 +17,7 @@
   window.applicationChangeRequests = [];
   window.applicationChangeEditingId = null;
   window.applicationChangeDeleteId = null;
+  window.applicationChangeRelatedSystems = [];
 
   async function ensureApplicationChangeModalLoaded() {
     const root = document.getElementById(modalRootId);
@@ -29,6 +30,37 @@
     }
     root.innerHTML = await response.text();
     return true;
+  }
+
+  async function loadRelatedSystemOptions(selectedValue) {
+    const select = document.getElementById('acr-related_system');
+    if (!select) return;
+    select.innerHTML = '<option value="">請選擇</option>';
+    try {
+      const response = await fetch(API + '/api/asset-inventory?asset_type=' + encodeURIComponent('軟體類'));
+      if (!response.ok) throw new Error('load failed');
+      const rows = await response.json();
+      const seen = new Set();
+      applicationChangeRelatedSystems = (rows || [])
+        .filter(item => item.environment === '正式')
+        .map(item => item.system_name || item.asset_name)
+        .filter(name => {
+          const key = String(name || '').trim();
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      select.innerHTML = '<option value="">請選擇</option>' + applicationChangeRelatedSystems
+        .map(name => `<option value="${escAttr(name)}">${esc(name)}</option>`)
+        .join('');
+      if (selectedValue && !seen.has(selectedValue)) {
+        select.insertAdjacentHTML('beforeend', `<option value="${escAttr(selectedValue)}">${esc(selectedValue)}</option>`);
+      }
+      select.value = selectedValue || '';
+    } catch (_) {
+      select.innerHTML = '<option value="">相關系統載入失敗</option>';
+      toast('相關系統清單載入失敗', 'error');
+    }
   }
 
   function applyCurrentUserToApplicationChangeForm() {
@@ -55,13 +87,14 @@
     const tbody = document.getElementById('application-change-requests-body');
     if (!tbody) return;
     if (!list || !list.length) {
-      tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><p>尚無功能需求更新建議資料</p></div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9"><div class="empty"><p>尚無功能需求更新建議資料</p></div></td></tr>`;
       return;
     }
     tbody.innerHTML = list.map(item => `
       <tr>
         <td style="color:var(--text-muted);font-size:12px;">#${item.id}</td>
         <td>${esc(item.system_name)}<br><span class="hint">${esc(item.feature_name)}</span></td>
+        <td>${esc(item.related_system || '—')}</td>
         <td>${esc(item.suggestor)}<br><span class="hint">${esc(formatDate(item.form_date))}</span></td>
         <td>制式：${esc(item.is_required_feature || '未選')}<br><span class="hint">重大：${esc(item.is_major_impact || '未選')}</span></td>
         <td>${esc(formatDate(item.expected_online_date))}</td>
@@ -78,6 +111,7 @@
     document.getElementById('application-change-request-modal-title').textContent = '新增功能需求更新建議';
     clearApplicationChangeForm();
     initDateInputs(document.getElementById('application-change-request-modal'));
+    await loadRelatedSystemOptions('');
     document.getElementById('acr-form_date').value = todayDateInputValue();
     applyCurrentUserToApplicationChangeForm();
     setModalSnapshotSource('application-change-request-modal', getApplicationChangeFormSnapshot);
@@ -94,6 +128,7 @@
     const data = await r.json();
     fillApplicationChangeForm(data);
     initDateInputs(document.getElementById('application-change-request-modal'));
+    await loadRelatedSystemOptions(data.related_system || '');
     setModalSnapshotSource('application-change-request-modal', getApplicationChangeFormSnapshot);
     captureModalBaseline('application-change-request-modal');
     document.getElementById('application-change-request-modal').classList.add('open');

@@ -15,6 +15,7 @@ func TestApplicationChangeRequestCRUDByCreator(t *testing.T) {
 	record := &models.ApplicationChangeRequest{
 		Suggestor:                 "王小明",
 		FormDate:                  "2026-09-11",
+		RelatedSystem:             "人事系統正式區",
 		SystemName:                "人事系統",
 		FeatureName:               "批次匯入功能",
 		IsRequiredFeature:         "是",
@@ -54,11 +55,12 @@ func TestApplicationChangeRequestCRUDByCreator(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetApplicationChangeRequestByCreator() error = %v", err)
 	}
-	if got.SystemName != record.SystemName || got.AccessControlMeasures != record.AccessControlMeasures {
+	if got.SystemName != record.SystemName || got.RelatedSystem != record.RelatedSystem || got.AccessControlMeasures != record.AccessControlMeasures {
 		t.Fatalf("GetApplicationChangeRequestByCreator() = %+v, want %+v", got, record)
 	}
 
 	got.Status = "closed"
+	got.RelatedSystem = "差勤系統正式區"
 	got.MeetingDecision = "排入下版開發"
 	if err := d.UpdateApplicationChangeRequest(got); err != nil {
 		t.Fatalf("UpdateApplicationChangeRequest() error = %v", err)
@@ -67,7 +69,7 @@ func TestApplicationChangeRequestCRUDByCreator(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetApplicationChangeRequestByCreator(updated) error = %v", err)
 	}
-	if updated.Status != "closed" || updated.MeetingDecision != "排入下版開發" {
+	if updated.Status != "closed" || updated.RelatedSystem != "差勤系統正式區" || updated.MeetingDecision != "排入下版開發" {
 		t.Fatalf("updated record = %+v, want closed with meeting decision", updated)
 	}
 
