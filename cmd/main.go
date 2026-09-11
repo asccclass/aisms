@@ -84,6 +84,14 @@ func main() {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	})
+	mux.HandleFunc("/firewall-graph", func(w http.ResponseWriter, r *http.Request) {
+		if err := renderer.Render(w, "firewall_graph.gohtml", web.PageData{
+			Title:    "防火牆 3D 關聯圖",
+			NavItems: web.BuildNav("/firewall-graph"),
+		}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
 	mux.HandleFunc("/asset-inventory", func(w http.ResponseWriter, r *http.Request) {
 		if err := renderer.Render(w, "asset_inventory.gohtml", web.PageData{
 			Title:    "04-008 資訊資產清冊",
@@ -126,6 +134,9 @@ func main() {
 	})
 	mux.HandleFunc("/firewall-requests.html", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/firewall-requests", http.StatusMovedPermanently)
+	})
+	mux.HandleFunc("/firewall-graph.html", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/firewall-graph", http.StatusMovedPermanently)
 	})
 	mux.HandleFunc("/asset-inventory.html", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/asset-inventory", http.StatusMovedPermanently)

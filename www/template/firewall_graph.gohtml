@@ -1,0 +1,103 @@
+{{ define "firewall_graph.gohtml" }}
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ .Title }}</title>
+<style>
+  :root { --primary:#1a3a5c; --primary-light:#2d6ca2; --accent:#0ea5e9; --success:#16a34a; --danger:#dc2626; --bg:#f0f4f8; --surface:#ffffff; --border:#e2e8f0; --text:#1e293b; --text-muted:#64748b; --shadow:0 4px 16px rgba(0,0,0,.08); }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:'Segoe UI', Arial, sans-serif; background:var(--bg); color:var(--text); min-height:100vh; overflow:hidden; }
+  .layout { display:flex; min-height:100vh; }
+  .sidebar { width:240px; background:var(--primary); color:#fff; display:flex; flex-direction:column; flex-shrink:0; position:fixed; top:0; bottom:0; left:0; z-index:100; }
+  .sidebar-header { padding:24px 20px; border-bottom:1px solid rgba(255,255,255,.1); }
+  .sidebar-header h1 { font-size:15px; font-weight:700; line-height:1.4; }
+  .sidebar nav { flex:1; padding:16px 0; }
+  .nav-item { display:flex; align-items:center; gap:10px; padding:12px 20px; cursor:pointer; font-size:14px; transition:background .15s; color:rgba(255,255,255,.8); border:none; background:none; width:100%; text-align:left; text-decoration:none; }
+  .nav-item:hover { background:rgba(255,255,255,.1); color:#fff; }
+  .nav-item.active { background:var(--primary-light); color:#fff; }
+  .nav-item .icon { font-size:18px; width:24px; }
+  .logout-btn { background:var(--danger); border:none; color:#fff; margin:20px; padding:8px 16px; border-radius:6px; cursor:pointer; transition:.2s; font-weight:bold; }
+  .logout-btn:hover { background:#b91c1c; }
+  .sidebar-footer { padding:16px 20px; font-size:11px; opacity:.4; border-top:1px solid rgba(255,255,255,.1); }
+  .main { margin-left:240px; flex:1; min-height:100vh; display:grid; grid-template-rows:auto 1fr; overflow:hidden; }
+  .topbar { display:flex; align-items:center; justify-content:space-between; padding:18px 22px; gap:16px; background:rgba(255,255,255,.94); border-bottom:1px solid var(--border); box-shadow:0 2px 12px rgba(15,23,42,.04); z-index:2; }
+  .topbar h2 { font-size:21px; font-weight:700; color:var(--primary); white-space:nowrap; }
+  .topbar-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .graph-shell { position:relative; min-height:0; background:#07111f; overflow:hidden; }
+  #firewall-graph-canvas { position:absolute; inset:0; width:100%; height:100%; display:block; cursor:grab; }
+  #firewall-graph-canvas:active { cursor:grabbing; }
+  .graph-panel { position:absolute; top:18px; right:18px; bottom:18px; width:330px; max-width:calc(100vw - 300px); background:rgba(255,255,255,.92); border:1px solid rgba(226,232,240,.9); box-shadow:0 18px 50px rgba(0,0,0,.28); padding:16px; display:grid; grid-template-rows:auto auto 1fr; gap:12px; overflow:hidden; }
+  .metric-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+  .metric { background:#eef6ff; border:1px solid #d7e8f7; padding:9px; border-radius:8px; }
+  .metric strong { display:block; color:var(--primary); font-size:18px; }
+  .metric span { color:var(--text-muted); font-size:11px; }
+  .search-box { width:100%; border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-size:14px; outline:none; }
+  .search-box:focus { border-color:var(--accent); }
+  .details { min-height:0; overflow:auto; color:var(--text); font-size:13px; line-height:1.6; }
+  .details h3 { color:var(--primary); font-size:16px; margin-bottom:6px; }
+  .rule-list { display:grid; gap:8px; margin-top:10px; }
+  .rule-item { border:1px solid var(--border); background:#fff; border-radius:8px; padding:9px; }
+  .hint { color:var(--text-muted); font-size:12px; }
+  .btn { padding:9px 14px; border-radius:8px; border:none; font-size:14px; cursor:pointer; font-weight:600; display:inline-flex; align-items:center; gap:6px; }
+  .btn-ghost { background:#e2e8f0; color:var(--text); }
+  .login-overlay { display:none; position:fixed; inset:0; background:var(--bg); z-index:9999; justify-content:center; align-items:center; }
+  .login-overlay.open { display:flex; }
+  .login-box { background:#fff; border-radius:12px; padding:40px; max-width:400px; width:90%; text-align:center; box-shadow:0 16px 40px rgba(0,0,0,.1); }
+  .login-box h2 { color:var(--primary); margin-bottom:20px; }
+  .login-box button { width:100%; padding:12px; font-size:16px; margin-top:20px; background:var(--primary-light); color:#fff; }
+  .confirm-overlay, #toast { display:none; }
+  .user-profile { display:flex; align-items:flex-start; gap:10px; font-size:14px; color:var(--text-muted); background:rgba(255,255,255,.92); border:1px solid var(--border); border-radius:12px; padding:10px 12px; min-width:250px; box-shadow:0 2px 10px rgba(15,23,42,.06); cursor:pointer; }
+  .user-profile strong { color:var(--text); font-weight:700; }
+  .user-profile-body { display:grid; gap:4px; min-width:0; }
+  .user-profile-name { display:flex; align-items:center; justify-content:space-between; gap:8px; color:var(--text); }
+  .user-profile-meta { font-size:11px; color:var(--text-muted); line-height:1.5; word-break:break-word; }
+  .user-profile-summary { color:var(--text); font-weight:600; }
+  .user-profile-detail { display:none; }
+  .user-profile.expanded .user-profile-detail { display:block; }
+  .user-profile-toggle { font-size:11px; color:var(--primary-light); background:#eef6ff; border-radius:999px; padding:2px 6px; white-space:nowrap; }
+  .user-avatar { width:30px; height:30px; border-radius:999px; object-fit:cover; border:1px solid var(--border); background:#fff; }
+  .user-avatar-fallback { display:inline-flex; align-items:center; justify-content:center; background:#e2e8f0; }
+  @media (max-width:900px) { .sidebar { display:none; } .main { margin-left:0; } .graph-panel { left:12px; right:12px; top:auto; bottom:12px; width:auto; max-width:none; max-height:42vh; } .topbar { align-items:stretch; flex-direction:column; } .topbar h2 { white-space:normal; } .user-profile { min-width:0; width:100%; } }
+</style>
+</head>
+<body>
+<div class="layout">
+  {{ template "sidebar" . }}
+  <main class="main">
+    <div class="topbar">
+      <h2>🕸️ 防火牆 3D 關聯圖</h2>
+      <div class="topbar-actions">
+        <div class="user-profile" id="user-profile-firewall-graph"></div>
+        <button class="btn btn-ghost" onclick="resetFirewallGraphView()">重置視角</button>
+      </div>
+    </div>
+    <section class="graph-shell">
+      <canvas id="firewall-graph-canvas"></canvas>
+      <aside class="graph-panel">
+        <div class="metric-grid">
+          <div class="metric"><strong id="graph-node-count">0</strong><span>節點</span></div>
+          <div class="metric"><strong id="graph-edge-count">0</strong><span>連線</span></div>
+          <div class="metric"><strong id="graph-rule-count">0</strong><span>規則</span></div>
+        </div>
+        <input id="graph-search" class="search-box" placeholder="搜尋主機、IP、區域" oninput="filterFirewallGraph(this.value)">
+        <div class="details" id="graph-details">
+          <h3>載入防火牆資料中</h3>
+          <p class="hint">完成後可拖曳旋轉、滾輪縮放，點選節點查看關聯規則。</p>
+        </div>
+      </aside>
+    </section>
+  </main>
+</div>
+{{ template "shared_ui" . }}
+<script>
+  window.pageInit = async function pageInit() {
+    await loadFirewallGraph();
+  };
+</script>
+<script src="/js/common.js"></script>
+<script type="module" src="/js/firewall-graph.js"></script>
+</body>
+</html>
+{{ end }}
