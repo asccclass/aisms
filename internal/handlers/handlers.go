@@ -6,8 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"isms-privilege/internal/datefmt"
 	"io"
+	"isms-privilege/internal/datefmt"
 	"isms-privilege/internal/db"
 	"isms-privilege/internal/docxexport"
 	"isms-privilege/internal/mailer"
@@ -34,6 +34,7 @@ var dashboardProviders = []models.DashboardFormProvider{
 	{Key: "firewall_requests", Label: "防火牆申請資料", Description: "使用 firewall_requests 資料表作為首頁表單資料來源"},
 	{Key: "protection_baselines", Label: "資通系統防護基準執行說明表", Description: "使用 protection_baseline_records 與 protection_baseline_controls 作為首頁表單資料來源"},
 	{Key: "system_platform_requests", Label: "系統平台申請資料", Description: "使用 system_platform_requests 資料表作為首頁表單資料來源"},
+	{Key: "application_change_requests", Label: "應用系統功能需求更新建議單", Description: "使用 application_change_requests 資料表作為首頁表單資料來源"},
 	{Key: "placeholder", Label: "示範骨架 / 尚未接資料", Description: "保留表單卡片與說明，首頁顯示空狀態"},
 	{Key: "custom_table_template", Label: "自訂資料表範本", Description: "作為未來接新資料表的 provider 樣板，預設先回傳空資料"},
 }
@@ -1152,6 +1153,8 @@ func (h *Handler) loadDashboardRecords(form models.DashboardForm, creator string
 		return h.loadProtectionBaselineDashboardRecords(creator)
 	case "system_platform_requests":
 		return h.loadSystemPlatformRequestDashboardRecords(creator)
+	case "application_change_requests":
+		return h.loadApplicationChangeRequestDashboardRecords(creator)
 	case "placeholder":
 		return h.loadPlaceholderDashboardRecords()
 	case "custom_table_template":
@@ -1264,6 +1267,33 @@ func (h *Handler) loadSystemPlatformRequestDashboardRecords(creator string) ([]m
 			InventoryDate: row.RequestDate,
 			UpdatedAt:     row.UpdatedAt,
 			Email:         row.Email,
+		})
+	}
+	return records, nil
+}
+
+func (h *Handler) loadApplicationChangeRequestDashboardRecords(creator string) ([]models.DashboardRecord, error) {
+	rows, err := h.DB.ListApplicationChangeRequestsByCreator(creator)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]models.DashboardRecord, 0, len(rows))
+	for _, row := range rows {
+		secondary := strings.TrimSpace(row.FeatureName)
+		if secondary == "" {
+			secondary = row.InformationServiceOpinion
+		} else if strings.TrimSpace(row.InformationServiceOpinion) != "" {
+			secondary = fmt.Sprintf("%s / %s", row.FeatureName, row.InformationServiceOpinion)
+		}
+		records = append(records, models.DashboardRecord{
+			ID:            row.ID,
+			PrimaryName:   firstNonEmpty(row.SystemName, row.FeatureName),
+			SecondaryName: secondary,
+			OwnerName:     row.Suggestor,
+			Status:        row.Status,
+			InventoryDate: row.FormDate,
+			UpdatedAt:     row.UpdatedAt,
+			Email:         "",
 		})
 	}
 	return records, nil
@@ -1454,6 +1484,17 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 		}
 	}))
 
+	mux.HandleFunc("/api/application-change-requests", auditAuth(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			h.ListApplicationChangeRequests(w, r)
+		case http.MethodPost:
+			h.CreateApplicationChangeRequest(w, r)
+		default:
+			http.Error(w, "method not allowed", 405)
+		}
+	}))
+
 	mux.HandleFunc("/api/protection-baselines", auditAuth(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -1598,6 +1639,19 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 			h.UpdateSystemPlatformRequest(w, r)
 		case http.MethodDelete:
 			h.DeleteSystemPlatformRequest(w, r)
+		default:
+			http.Error(w, "method not allowed", 405)
+		}
+	}))
+
+	mux.HandleFunc("/api/application-change-requests/", auditAuth(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			h.GetApplicationChangeRequest(w, r)
+		case http.MethodPut:
+			h.UpdateApplicationChangeRequest(w, r)
+		case http.MethodDelete:
+			h.DeleteApplicationChangeRequest(w, r)
 		default:
 			http.Error(w, "method not allowed", 405)
 		}

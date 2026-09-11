@@ -1,0 +1,49 @@
+<div class="modal-overlay" id="application-change-request-modal">
+  <div class="modal">
+    <h3 id="application-change-request-modal-title">新增功能需求更新建議</h3>
+    <div class="form-grid">
+      <div class="form-section">基本資料</div>
+      <div class="form-group"><label>建議者</label><input id="acr-suggestor" class="form-control"></div>
+      <div class="form-group"><label>填單日期</label><input id="acr-form_date" class="form-control" data-date-input placeholder="yyyy-mm-dd"></div>
+      <div class="form-group"><label>簽核者</label><input id="acr-approver" class="form-control"></div>
+      <div class="form-group"><label>狀態</label><select id="acr-status" class="form-control"><option value="active">進行中</option><option value="pending">待追蹤</option><option value="closed">已完成</option></select></div>
+      <div class="form-group"><label>應用系統名稱</label><input id="acr-system_name" class="form-control"></div>
+      <div class="form-group"><label>功能需求名稱</label><input id="acr-feature_name" class="form-control"></div>
+
+      <div class="form-section">功能需求屬性</div>
+      <div class="form-group"><label>必要的制式功能</label><select id="acr-is_required_feature" class="form-control"><option value="">未選擇</option><option value="是">是</option><option value="否">否</option></select></div>
+      <div class="form-group"><label>影響重大的功能</label><select id="acr-is_major_impact" class="form-control"><option value="">未選擇</option><option value="是">是</option><option value="否">否</option></select></div>
+      <div class="form-group"><label>希望最遲上線日</label><input id="acr-expected_online_date" class="form-control" data-date-input placeholder="yyyy-mm-dd"></div>
+      <div class="form-group full"><label>問題背景說明 / 預估效益</label><textarea id="acr-background_description" class="form-control" rows="4"></textarea></div>
+
+      <div class="form-section">資訊服務處可行性分析</div>
+      <div class="form-group"><label>沿用既有資安措施或無涉資安</label><select id="acr-existing_security_measures" class="form-control"><option value="">未選擇</option><option value="是">是</option><option value="否">否</option></select></div>
+      <div class="form-group"><label>增修範圍涉及資訊安全事項</label><select id="acr-security_scope_involved" class="form-control"><option value="">未選擇</option><option value="是">是</option><option value="否">否</option></select></div>
+      <div class="form-group full"><label>存取控制措施</label><input id="acr-access_control_measures" class="form-control" placeholder="帳號管理、最小權限、遠端存取"></div>
+      <div class="form-group full"><label>稽核與可歸責性措施</label><input id="acr-audit_measures" class="form-control" placeholder="稽核事件、稽核紀錄內容、時戳及校時等"></div>
+      <div class="form-group"><label>營運持續計畫</label><input id="acr-continuity_measures" class="form-control" placeholder="系統備份、系統備援"></div>
+      <div class="form-group"><label>識別與鑑別</label><input id="acr-identification_measures" class="form-control"></div>
+      <div class="form-group full"><label>系統與服務獲得</label><input id="acr-system_acquisition_measures" class="form-control" placeholder="SDLC需求/設計/開發/測試/部署與維運/委外、獲取程序、系統文件"></div>
+      <div class="form-group"><label>系統與通訊保護</label><input id="acr-communication_measures" class="form-control"></div>
+      <div class="form-group"><label>系統與資訊完整性</label><input id="acr-integrity_measures" class="form-control"></div>
+      <div class="form-group"><label>容量管理檢視</label><select id="acr-capacity_management" class="form-control"><option value="">未選擇</option><option value="沿用既有容量設定">沿用既有容量設定</option><option value="容量設定變更">容量設定變更</option></select></div>
+      <div class="form-group"><label>容量變更說明</label><input id="acr-capacity_change_description" class="form-control"></div>
+      <div class="form-group"><label>非 Web 檔案不置放於 Web 目錄內</label><select id="acr-other_security_measures" class="form-control"><option value="">未選擇</option><option value="是">是</option><option value="否">否</option></select></div>
+      <div class="form-group"><label>其他資安措施</label><input id="acr-other_security_description" class="form-control"></div>
+
+      <div class="form-section">資訊服務處意見</div>
+      <div class="form-group"><label>辦理意見</label><select id="acr-information_service_opinion" class="form-control"><option value="">未選擇</option><option value="同意配合辦理">同意配合辦理</option><option value="由雙方共同商議可行性">由雙方共同商議可行性</option><option value="不同意配合辦理">不同意配合辦理</option></select></div>
+      <div class="form-group"><label>共同商議時間</label><input id="acr-meeting_time" class="form-control" placeholder="yyyy-mm-dd hh:mm"></div>
+      <div class="form-group full"><label>決議</label><textarea id="acr-meeting_decision" class="form-control" rows="2"></textarea></div>
+      <div class="form-group full"><label>不同意理由</label><textarea id="acr-rejection_reason" class="form-control" rows="2"></textarea></div>
+      <div class="form-group"><label>會辦人員</label><input id="acr-coordinating_staff" class="form-control"></div>
+      <div class="form-group"><label>會辦日期</label><input id="acr-coordination_date" class="form-control" data-date-input placeholder="yyyy-mm-dd"></div>
+      <div class="form-group"><label>會辦簽核者</label><input id="acr-coordination_approver" class="form-control"></div>
+      <div class="form-group full"><label>備註</label><textarea id="acr-remarks" class="form-control" rows="3"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('application-change-request-modal')">取消</button>
+      <button class="btn btn-primary" onclick="saveApplicationChangeRequest()">儲存</button>
+    </div>
+  </div>
+</div>

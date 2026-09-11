@@ -92,6 +92,14 @@ func main() {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	})
+	mux.HandleFunc("/application-change-requests", func(w http.ResponseWriter, r *http.Request) {
+		if err := renderer.Render(w, "application_change_requests.gohtml", web.PageData{
+			Title:    "04-052 應用系統功能需求更新建議",
+			NavItems: web.BuildNav("/application-change-requests"),
+		}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
 	mux.HandleFunc("/accounts", func(w http.ResponseWriter, r *http.Request) {
 		if err := renderer.Render(w, "accounts.gohtml", web.PageData{
 			Title:    "04-062 特殊權限帳號管理",
@@ -121,6 +129,9 @@ func main() {
 	})
 	mux.HandleFunc("/asset-inventory.html", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/asset-inventory", http.StatusMovedPermanently)
+	})
+	mux.HandleFunc("/application-change-requests.html", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/application-change-requests", http.StatusMovedPermanently)
 	})
 	mux.HandleFunc("/accounts.html", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/accounts", http.StatusMovedPermanently)
