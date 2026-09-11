@@ -224,9 +224,6 @@ func (h *Handler) CreateAssetInventoryRecord(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	req.Creator = GetUserEmail(r)
-	if strings.TrimSpace(req.Environment) == "" {
-		req.Environment = "正式"
-	}
 	if strings.TrimSpace(req.Status) == "" {
 		req.Status = "active"
 	}
@@ -257,9 +254,6 @@ func (h *Handler) UpdateAssetInventoryRecord(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	req.Creator = existing.Creator
-	if strings.TrimSpace(req.Environment) == "" {
-		req.Environment = "正式"
-	}
 	if err := h.DB.UpdateAssetInventoryRecord(&req); err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return

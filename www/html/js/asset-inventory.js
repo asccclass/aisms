@@ -1,6 +1,6 @@
 (function () {
   const modalRootId = 'feature-asset-inventory-modal-root';
-  const modalPartialPath = '/partials/asset-inventory-modal.html?v=20260911-environment';
+  const modalPartialPath = '/partials/asset-inventory-modal.html?v=20260911-environment-blank';
   const fields = [
     'system_name', 'environment', 'asset_code', 'asset_type', 'asset_name', 'vendor_name',
     'is_core_asset', 'has_national_security_concern', 'asset_description', 'quantity',
@@ -72,7 +72,7 @@
       <tr>
         <td style="color:var(--text-muted);font-size:12px;">#${item.id}</td>
         <td>${esc(item.system_name)}<br><span class="hint">${esc(item.asset_code || '—')}</span></td>
-        <td>${esc(item.environment || '正式')}</td>
+        <td>${esc(item.environment || '—')}</td>
         <td>${esc(item.asset_type)}<br><span class="hint">${esc(item.asset_name)}</span></td>
         <td>${esc(item.manager_department)}<br><span class="hint">${esc(item.user_department)}</span></td>
         <td>${esc(item.location)}</td>
@@ -113,7 +113,7 @@
       const el = document.getElementById('ai-' + field);
       if (el) el.value = '';
     });
-    document.getElementById('ai-environment').value = '正式';
+    document.getElementById('ai-environment').value = '';
     document.getElementById('ai-asset_type').value = '實體類';
     document.getElementById('ai-is_core_asset').value = '否';
     document.getElementById('ai-has_national_security_concern').value = '否';

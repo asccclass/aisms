@@ -47,4 +47,16 @@ func TestAssetInventoryEnvironmentCRUD(t *testing.T) {
 	if updated.Environment != "正式" {
 		t.Fatalf("updated Environment = %q, want 正式", updated.Environment)
 	}
+
+	updated.Environment = ""
+	if err := d.UpdateAssetInventoryRecord(updated); err != nil {
+		t.Fatalf("UpdateAssetInventoryRecord(blank environment) error = %v", err)
+	}
+	blank, err := d.GetAssetInventoryRecordByCreator(int(id), "owner@example.com")
+	if err != nil {
+		t.Fatalf("GetAssetInventoryRecordByCreator(blank) error = %v", err)
+	}
+	if blank.Environment != "" {
+		t.Fatalf("blank Environment = %q, want empty", blank.Environment)
+	}
 }
