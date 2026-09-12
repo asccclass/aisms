@@ -82,7 +82,8 @@ window.selectFirewallGraphNode = function selectFirewallGraphNode(nodeId) {
 window.__firewallGraphDebug = {
   visibleNodeCount: () => graph.nodes.filter(node => node.mesh?.visible).length,
   visibleEdgeCount: () => graph.edges.filter(edge => edge.line?.visible).length,
-  renamedIPNodeCount: () => graph.nodes.filter(node => node.originalName && node.originalName !== node.name).length
+  renamedIPNodeCount: () => graph.nodes.filter(node => node.originalName && node.originalName !== node.name).length,
+  buildNodeTooltipHTML: (node) => buildNodeTooltipHTML(node)
 };
 
 function buildGraph(records) {
@@ -255,6 +256,7 @@ function drawNodes() {
     node.mesh.userData.node = node;
     node.label = createLabel(node.name, color);
     node.label.position.copy(node.position).add(new THREE.Vector3(0, scale + 10, 0));
+    node.label.userData.node = node;
     graph.group.add(node.mesh, node.label);
   });
 }
@@ -341,15 +343,107 @@ function updateNodeTooltip(event) {
     return;
   }
   const node = pickNodeAt(event.clientX, event.clientY);
-  if (!node || !node.originalName) {
+  if (!node) {
     hideNodeTooltip();
     return;
   }
   const rect = canvas.parentElement.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+
   tooltip.style.display = 'block';
-  tooltip.style.left = `${event.clientX - rect.left + 14}px`;
-  tooltip.style.top = `${event.clientY - rect.top + 14}px`;
-  tooltip.innerHTML = `<strong>${esc(node.name)}</strong><br>IP：${esc(node.originalName)}`;
+  tooltip.innerHTML = buildNodeTooltipHTML(node);
+
+  const tooltipWidth = tooltip.offsetWidth || 260;
+  const tooltipHeight = tooltip.offsetHeight || 120;
+  let left = x + 14;
+  let top = y + 14;
+
+  if (left + tooltipWidth > rect.width - 10) {
+    left = x - tooltipWidth - 14;
+  }
+  if (top + tooltipHeight > rect.height - 10) {
+    top = y - tooltipHeight - 14;
+  }
+
+  tooltip.style.left = `${Math.max(10, left)}px`;
+  tooltip.style.top = `${Math.max(10, top)}px`;
+}
+
+function buildNodeTooltipHTML(node) {
+  const typeLabels = {
+    host: '🖥️ 系統主機',
+    source: '📥 來源端',
+    destination: '📤 目的端'
+  };
+  const typeText = typeLabels[node.type] || node.type;
+
+  let ipContent = '';
+
+  if (node.type === 'host') {
+    const platformReq = graph.platformRequests.find(p => normalizeName(p.system_name, '') === node.name);
+    const platformIP = platformReq?.ip_restriction?.trim();
+
+    const relatedSrcIPs = Array.from(new Set(node.rules.map(r => r.source_ip).filter(Boolean)));
+    const relatedDstIPs = Array.from(new Set(node.rules.map(r => r.destination_ip).filter(Boolean)));
+
+    if (platformIP) {
+      ipContent += `<div><span style="color:#94a3b8;">主機 IP/限制：</span><strong style="color:#38bdf8;">${esc(platformIP)}</strong></div>`;
+    }
+    if (relatedSrcIPs.length) {
+      const srcDisplay = relatedSrcIPs.slice(0, 3).join(', ') + (relatedSrcIPs.length > 3 ? ` 等 ${relatedSrcIPs.length} 個` : '');
+      ipContent += `<div><span style="color:#94a3b8;">關聯來源 IP：</span>${esc(srcDisplay)}</div>`;
+    }
+    if (relatedDstIPs.length) {
+      const dstDisplay = relatedDstIPs.slice(0, 3).join(', ') + (relatedDstIPs.length > 3 ? ` 等 ${relatedDstIPs.length} 個` : '');
+      ipContent += `<div><span style="color:#94a3b8;">關聯目的 IP：</span>${esc(dstDisplay)}</div>`;
+    }
+    if (!platformIP && !relatedSrcIPs.length && !relatedDstIPs.length) {
+      ipContent += `<div><span style="color:#94a3b8;">IP 資訊：</span>尚未指定</div>`;
+    }
+
+    if (platformReq) {
+      if (platformReq.applicant_department || platformReq.applicant_name) {
+        ipContent += `<div><span style="color:#94a3b8;">保管/申請人：</span>${esc(platformReq.applicant_department || '')} ${esc(platformReq.applicant_name || '')}</div>`;
+      }
+      if (platformReq.environment_type) {
+        ipContent += `<div><span style="color:#94a3b8;">環境類別：</span>${esc(platformReq.environment_type)}</div>`;
+      }
+    }
+  } else {
+    const ipList = [];
+    if (node.originalName && node.originalName !== node.name) {
+      ipList.push(node.originalName);
+    }
+    if (node.keyName && node.keyName !== node.name && !ipList.includes(node.keyName)) {
+      ipList.push(node.keyName);
+    }
+
+    if (ipList.length > 0) {
+      ipContent += `<div><span style="color:#94a3b8;">IP 位址/區域：</span><strong style="color:#38bdf8;">${esc(ipList.join(', '))}</strong></div>`;
+    } else {
+      ipContent += `<div><span style="color:#94a3b8;">IP 位址/區域：</span><strong style="color:#38bdf8;">${esc(node.name)}</strong></div>`;
+    }
+  }
+
+  const protocols = Array.from(new Set(node.rules.map(r => r.protocol_type).filter(Boolean)));
+  const protocolText = protocols.length > 0 ? protocols.slice(0, 4).join(', ') : '未指定';
+
+  const fwIDs = Array.from(new Set(node.rules.map(r => r.firewall_id).filter(Boolean)));
+  const fwText = fwIDs.length > 0 ? fwIDs.slice(0, 3).join(', ') : '';
+
+  return `
+    <div style="font-weight:700;font-size:13px;color:#f8fafc;margin-bottom:6px;border-bottom:1px solid rgba(255,255,255,0.12);padding-bottom:5px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+      <span>${esc(node.name)}</span>
+      <span style="font-size:11px;font-weight:500;background:rgba(56,189,248,0.2);color:#38bdf8;padding:2px 6px;border-radius:4px;white-space:nowrap;">${typeText}</span>
+    </div>
+    <div style="display:grid;gap:3px;font-size:12px;color:#cbd5e1;">
+      ${ipContent}
+      <div><span style="color:#94a3b8;">關聯規則數：</span><strong style="color:#f59e0b;">${node.rules.length}</strong> 筆</div>
+      <div><span style="color:#94a3b8;">通訊協定：</span>${esc(protocolText)}</div>
+      ${fwText ? `<div><span style="color:#94a3b8;">防火牆編號：</span>${esc(fwText)}</div>` : ''}
+    </div>
+  `;
 }
 
 function hideNodeTooltip() {
@@ -361,10 +455,10 @@ function pickNodeAt(clientX, clientY) {
   graph.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
   graph.pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
   graph.raycaster.setFromCamera(graph.pointer, graph.camera);
-  const visibleMeshes = graph.nodes
+  const visibleObjects = graph.nodes
     .filter(node => node.mesh?.visible)
-    .map(node => node.mesh);
-  const hit = graph.raycaster.intersectObjects(visibleMeshes)[0];
+    .flatMap(node => [node.mesh, node.label].filter(Boolean));
+  const hit = graph.raycaster.intersectObjects(visibleObjects)[0];
   return hit ? hit.object.userData.node : null;
 }
 
