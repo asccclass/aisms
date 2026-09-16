@@ -71,7 +71,7 @@ window.renderFormsGrid = function renderFormsGrid() {
         </div>
         <div class="form-tile-metrics">
           <div class="form-tile-metric"><div class="label">紀錄數</div><div class="value">${total}</div></div>
-          <div class="form-tile-metric"><div class="label">使用中</div><div class="value">${active}</div></div>
+          <div class="form-tile-metric"><div class="label">進行中</div><div class="value">${active}</div></div>
           <div class="form-tile-metric"><div class="label">待確認</div><div class="value">${pending}</div></div>
         </div>
         <div style="margin-top:14px;display:flex;justify-content:space-between;align-items:center;gap:12px;">

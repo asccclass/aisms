@@ -6,7 +6,7 @@ import "time"
 type AccountStatus string
 
 const (
-	StatusActive   AccountStatus = "active"   // 使用中
+	StatusActive   AccountStatus = "active"   // 進行中
 	StatusClosed   AccountStatus = "closed"   // 關閉
 	StatusPending  AccountStatus = "pending"  // 待確認
 	StatusExpired  AccountStatus = "expired"  // 已過期

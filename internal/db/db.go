@@ -626,8 +626,8 @@ func (d *DB) seedDashboardForms() error {
 			DisplayOrder: 2,
 			Enabled:      true,
 			FocusItems: models.DashboardFocusItems{
-				ActiveTitle:  "使用中帳號",
-				ActiveMeta:   "目前仍在使用中的特殊權限帳號",
+				ActiveTitle:  "進行中帳號",
+				ActiveMeta:   "目前仍在進行中的特殊權限帳號",
 				PendingTitle: "待確認帳號",
 				PendingMeta:  "建議優先通知與追蹤回覆",
 				ClosedTitle:  "已關閉帳號",
@@ -690,7 +690,7 @@ func (d *DB) seedDashboardForms() error {
 			Enabled:      true,
 			FocusItems: models.DashboardFocusItems{
 				ActiveTitle:  "進行中申請",
-				ActiveMeta:   "目前正在處理或使用中的平台申請",
+				ActiveMeta:   "目前正在處理或進行中的平台申請",
 				PendingTitle: "待追蹤申請",
 				PendingMeta:  "需補件、待審核或待確認的申請",
 				ClosedTitle:  "已完成申請",

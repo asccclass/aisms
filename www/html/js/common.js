@@ -133,7 +133,7 @@ window.confirmOk = function confirmOk() {
 
 window.statusBadge = function statusBadge(s) {
   const map = { active:'badge-active', closed:'badge-closed', pending:'badge-pending', expired:'badge-expired' };
-  const label = { active:'使用中', closed:'已關閉', pending:'待確認', expired:'已過期' };
+  const label = { active:'進行中', closed:'已關閉', pending:'待確認', expired:'已過期' };
   return `<span class="badge ${map[s]||'badge-default'}">${label[s]||s}</span>`;
 };
 

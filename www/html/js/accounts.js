@@ -168,7 +168,7 @@ window.notifyAll = async function notifyAll() {
   const btn = event.currentTarget;
   showConfirmDialog({
     title: '📧 批次通知確認',
-    message: '將對所有「使用中」且有 Email 的帳號發送確認通知，確定繼續？',
+    message: '將對所有「進行中」且有 Email 的帳號發送確認通知，確定繼續？',
     confirmLabel: '確認發送',
     confirmClass: 'btn btn-warning',
     onConfirm: async () => {
@@ -177,7 +177,7 @@ window.notifyAll = async function notifyAll() {
       const r = await fetch(API + '/api/notify-all', { method: 'POST' });
       const j = await r.json();
       btn.disabled = false;
-      btn.innerHTML = '📧 批次通知所有使用中帳號';
+      btn.innerHTML = '📧 批次通知所有進行中帳號';
       toast(`發送完成：成功 ${j.sent} 封，失敗 ${j.failed} 封`, j.failed ? 'error' : 'success');
       loadDashboardPage();
     }
