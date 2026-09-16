@@ -1,6 +1,6 @@
 (function () {
   const modalRootId = 'feature-platform-request-modal-root';
-  const modalPartialPath = '/partials/platform-request-modal.html';
+  const modalPartialPath = '/partials/platform-request-modal.html?v=20260916-assigned-ip';
   const exportModalRootId = 'feature-platform-request-export-root';
   const exportModalPartialPath = '/partials/platform-request-export-modal.html';
   const exportStoragePrefix = 'isms_platform_export_reviewers';
