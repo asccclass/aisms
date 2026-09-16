@@ -123,7 +123,7 @@ func TestListFirewallRequestsUsesPlatformSystemNames(t *testing.T) {
 	if got == nil {
 		t.Fatalf("ListFirewallRequests did not return FW-TEST-078; got %d items", len(list))
 	}
-	want := "來源平台系統（正式環境）--目的平台系統（測試環境）"
+	want := "來源平台系統（正式環境）-- 目的平台系統（測試環境）"
 	if got.SystemName != want {
 		t.Fatalf("SystemName = %q, want %q", got.SystemName, want)
 	}
@@ -181,7 +181,7 @@ func TestCreateSystemPlatformRequestSyncsFirewallNames(t *testing.T) {
 	if got == nil {
 		t.Fatalf("FW-AUTO-SYNC not found")
 	}
-	want := "來源自動平台（正式環境）--目的自動平台（測試環境）"
+	want := "來源自動平台（正式環境）-- 目的自動平台（測試環境）"
 	if got.SystemName != want {
 		t.Fatalf("SystemName = %q, want %q", got.SystemName, want)
 	}

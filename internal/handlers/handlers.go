@@ -595,7 +595,7 @@ func (h *Handler) resolveFirewallPlatformSystemName(row models.FirewallRequest, 
 	if !sourceOK || !destinationOK {
 		return "", false
 	}
-	return sourceName + "--" + destinationName, true
+	return sourceName + "-- " + destinationName, true
 }
 
 func buildPlatformIPSystemNameMap(rows []models.SystemPlatformRequest) map[string]string {
