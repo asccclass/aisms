@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -93,6 +94,14 @@ func TestListFirewallRequestsUsesPlatformSystemNames(t *testing.T) {
 		t.Fatalf("CreateFirewallRequest failed: %v", err)
 	}
 
+	result, err := h.SyncFirewallPlatformSystemNames("")
+	if err != nil {
+		t.Fatalf("SyncFirewallPlatformSystemNames failed: %v", err)
+	}
+	if result.Matched != 1 || result.Updated != 1 {
+		t.Fatalf("sync result = %+v, want matched=1 updated=1", result)
+	}
+
 	req := httptest.NewRequest(http.MethodGet, "/api/firewall-requests", nil)
 	rr := httptest.NewRecorder()
 	h.ListFirewallRequests(rr, req)
@@ -115,6 +124,64 @@ func TestListFirewallRequestsUsesPlatformSystemNames(t *testing.T) {
 		t.Fatalf("ListFirewallRequests did not return FW-TEST-078; got %d items", len(list))
 	}
 	want := "來源平台系統（正式環境）--目的平台系統（測試環境）"
+	if got.SystemName != want {
+		t.Fatalf("SystemName = %q, want %q", got.SystemName, want)
+	}
+}
+
+func TestCreateSystemPlatformRequestSyncsFirewallNames(t *testing.T) {
+	tempDB := filepath.Join(t.TempDir(), "test_platform_create_sync.db")
+	database, err := db.New(tempDB)
+	if err != nil {
+		t.Fatalf("failed to create temp db: %v", err)
+	}
+	defer database.Close()
+
+	h := New(database, nil)
+	firewallReq := models.FirewallRequest{
+		SystemName:    "待同步名稱",
+		Action:        "允許",
+		SourceIP:      "10.30.1.10",
+		DestinationIP: "10.30.1.20/32",
+		ProtocolType:  "TCP: 443",
+		FirewallID:    "FW-AUTO-SYNC",
+		Status:        "active",
+	}
+	if _, err := database.CreateFirewallRequest(&firewallReq); err != nil {
+		t.Fatalf("CreateFirewallRequest failed: %v", err)
+	}
+	source := models.SystemPlatformRequest{
+		SystemName:      "來源自動平台",
+		EnvironmentType: "正式環境",
+		AssignedIP:      "10.30.1.10",
+		Status:          "active",
+	}
+	if _, err := database.CreateSystemPlatformRequest(&source); err != nil {
+		t.Fatalf("CreateSystemPlatformRequest source failed: %v", err)
+	}
+	payload := `{"system_name":"目的自動平台","environment_type":"測試環境","assigned_ip":"10.30.1.20","applicant_name":"王小明","status":"active"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/platform-requests", strings.NewReader(payload))
+	rr := httptest.NewRecorder()
+	h.CreateSystemPlatformRequest(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("CreateSystemPlatformRequest status = %d, want %d; body=%s", rr.Code, http.StatusCreated, rr.Body.String())
+	}
+
+	rows, err := database.ListFirewallRequests()
+	if err != nil {
+		t.Fatalf("ListFirewallRequests failed: %v", err)
+	}
+	var got *models.FirewallRequest
+	for i := range rows {
+		if rows[i].FirewallID == "FW-AUTO-SYNC" {
+			got = &rows[i]
+			break
+		}
+	}
+	if got == nil {
+		t.Fatalf("FW-AUTO-SYNC not found")
+	}
+	want := "來源自動平台（正式環境）--目的自動平台（測試環境）"
 	if got.SystemName != want {
 		t.Fatalf("SystemName = %q, want %q", got.SystemName, want)
 	}

@@ -28,3 +28,8 @@ type FirewallRequest struct {
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }
+
+type FirewallPlatformNameSyncResult struct {
+	Matched int `json:"matched"`
+	Updated int `json:"updated"`
+}

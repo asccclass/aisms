@@ -680,6 +680,8 @@ func buildAuditEventType(r *http.Request) string {
 		return "platform_requests." + methodAction(r.Method)
 	case path == "/api/firewall-requests":
 		return "firewall_requests." + methodAction(r.Method)
+	case path == "/api/firewall-requests/sync-platform-names":
+		return "firewall_requests.sync_platform_names"
 	case strings.HasPrefix(path, "/api/firewall-requests/"):
 		return "firewall_requests." + methodAction(r.Method)
 	case path == "/api/asset-inventory":

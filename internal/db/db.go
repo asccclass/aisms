@@ -1216,6 +1216,11 @@ func (d *DB) UpdateFirewallRequest(r *models.FirewallRequest) error {
 	return err
 }
 
+func (d *DB) UpdateFirewallRequestSystemName(id int, systemName string) error {
+	_, err := d.conn.Exec(`UPDATE firewall_requests SET system_name=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`, systemName, id)
+	return err
+}
+
 func (d *DB) DeleteFirewallRequest(id int) error {
 	return d.DeleteFirewallRequestByCreator(id, "")
 }

@@ -200,7 +200,6 @@ func (h *Handler) ListFirewallRequests(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
 	}
-	rows = h.withPlatformSystemNames(rows, creator)
 	writeJSON(w, 200, rows)
 }
 
@@ -555,13 +554,48 @@ func (h *Handler) withPlatformSystemNames(rows []models.FirewallRequest, creator
 	result := make([]models.FirewallRequest, len(rows))
 	copy(result, rows)
 	for i := range result {
-		sourceName, sourceOK := resolvePlatformSystemName(result[i].SourceIP, ipToSystemName)
-		destinationName, destinationOK := resolvePlatformSystemName(result[i].DestinationIP, ipToSystemName)
-		if sourceOK && destinationOK {
-			result[i].SystemName = sourceName + "--" + destinationName
+		if systemName, ok := h.resolveFirewallPlatformSystemName(result[i], ipToSystemName); ok {
+			result[i].SystemName = systemName
 		}
 	}
 	return result
+}
+
+func (h *Handler) SyncFirewallPlatformSystemNames(creator string) (*models.FirewallPlatformNameSyncResult, error) {
+	rows, err := h.DB.ListFirewallRequestsByCreator(creator)
+	if err != nil {
+		return nil, err
+	}
+	platformRows, err := h.DB.ListSystemPlatformRequestsByCreator(creator)
+	if err != nil {
+		return nil, err
+	}
+	ipToSystemName := buildPlatformIPSystemNameMap(platformRows)
+	result := &models.FirewallPlatformNameSyncResult{}
+	for _, row := range rows {
+		systemName, ok := h.resolveFirewallPlatformSystemName(row, ipToSystemName)
+		if !ok {
+			continue
+		}
+		result.Matched++
+		if strings.TrimSpace(row.SystemName) == systemName {
+			continue
+		}
+		if err := h.DB.UpdateFirewallRequestSystemName(row.ID, systemName); err != nil {
+			return nil, err
+		}
+		result.Updated++
+	}
+	return result, nil
+}
+
+func (h *Handler) resolveFirewallPlatformSystemName(row models.FirewallRequest, ipToSystemName map[string]string) (string, bool) {
+	sourceName, sourceOK := resolvePlatformSystemName(row.SourceIP, ipToSystemName)
+	destinationName, destinationOK := resolvePlatformSystemName(row.DestinationIP, ipToSystemName)
+	if !sourceOK || !destinationOK {
+		return "", false
+	}
+	return sourceName + "--" + destinationName, true
 }
 
 func buildPlatformIPSystemNameMap(rows []models.SystemPlatformRequest) map[string]string {
@@ -711,7 +745,17 @@ func (h *Handler) CreateSystemPlatformRequest(w http.ResponseWriter, r *http.Req
 		return
 	}
 	req.ID = int(id)
+	_, _ = h.SyncFirewallPlatformSystemNames(req.Creator)
 	writeJSON(w, 201, req)
+}
+
+func (h *Handler) SyncFirewallPlatformNames(w http.ResponseWriter, r *http.Request) {
+	result, err := h.SyncFirewallPlatformSystemNames(GetUserEmail(r))
+	if err != nil {
+		writeJSON(w, 500, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, 200, result)
 }
 
 func (h *Handler) UpdateSystemPlatformRequest(w http.ResponseWriter, r *http.Request) {
@@ -1697,6 +1741,14 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 		default:
 			http.Error(w, "method not allowed", 405)
 		}
+	}))
+
+	mux.HandleFunc("/api/firewall-requests/sync-platform-names", auditAuth(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			h.SyncFirewallPlatformNames(w, r)
+			return
+		}
+		http.Error(w, "method not allowed", 405)
 	}))
 
 	mux.HandleFunc("/api/firewall-requests/", auditAuth(func(w http.ResponseWriter, r *http.Request) {

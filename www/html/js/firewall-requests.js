@@ -150,4 +150,12 @@
     toast('防火牆申請已刪除', 'success');
     await Promise.all([loadFirewallRequests(), loadDashboardPage()]);
   };
+
+  window.syncFirewallPlatformNames = async function syncFirewallPlatformNames() {
+    const r = await fetch(API + '/api/firewall-requests/sync-platform-names', { method: 'POST' });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return toast('同步失敗：' + (data.error || '未知錯誤'), 'error');
+    toast(`同步完成：符合 ${data.matched || 0} 筆，更新 ${data.updated || 0} 筆`, 'success');
+    await Promise.all([loadFirewallRequests(), loadDashboardPage()]);
+  };
 })();
