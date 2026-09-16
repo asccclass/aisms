@@ -7,6 +7,7 @@ type ApplicationChangeRequest struct {
 	ID                        int       `json:"id"`
 	Suggestor                 string    `json:"suggestor"`
 	FormDate                  string    `json:"form_date"`
+	RecordNumber              string    `json:"record_number"`
 	Approver                  string    `json:"approver"`
 	RelatedSystem             string    `json:"related_system"`
 	SystemName                string    `json:"system_name"`

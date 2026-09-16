@@ -160,6 +160,7 @@ func (d *DB) migrate() error {
 		id                            INTEGER PRIMARY KEY AUTOINCREMENT,
 		suggestor                     TEXT    NOT NULL DEFAULT '',
 		form_date                     TEXT    NOT NULL DEFAULT '',
+		record_number                 TEXT    NOT NULL DEFAULT '',
 		approver                      TEXT    NOT NULL DEFAULT '',
 		related_system                TEXT    NOT NULL DEFAULT '',
 		system_name                   TEXT    NOT NULL DEFAULT '',
@@ -295,6 +296,7 @@ func (d *DB) migrate() error {
 	_, _ = d.conn.Exec(`ALTER TABLE privileged_accounts ADD COLUMN creator TEXT NOT NULL DEFAULT ''`)
 	_, _ = d.conn.Exec(`ALTER TABLE asset_inventory_records ADD COLUMN environment TEXT NOT NULL DEFAULT '正式'`)
 	_, _ = d.conn.Exec(`ALTER TABLE application_change_requests ADD COLUMN related_system TEXT NOT NULL DEFAULT ''`)
+	_, _ = d.conn.Exec(`ALTER TABLE application_change_requests ADD COLUMN record_number TEXT NOT NULL DEFAULT ''`)
 	_, _ = d.conn.Exec(`ALTER TABLE system_platform_requests ADD COLUMN assigned_ip TEXT NOT NULL DEFAULT ''`)
 	if err == nil {
 		_ = d.seedDashboardForms()
