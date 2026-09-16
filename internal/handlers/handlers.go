@@ -592,10 +592,20 @@ func (h *Handler) SyncFirewallPlatformSystemNames(creator string) (*models.Firew
 func (h *Handler) resolveFirewallPlatformSystemName(row models.FirewallRequest, ipToSystemName map[string]string) (string, bool) {
 	sourceName, sourceOK := resolvePlatformSystemName(row.SourceIP, ipToSystemName)
 	destinationName, destinationOK := resolvePlatformSystemName(row.DestinationIP, ipToSystemName)
-	if !sourceOK || !destinationOK {
-		return "", false
+	originalName := strings.TrimSpace(row.SystemName)
+	if originalName == "" {
+		originalName = "未命名系統"
 	}
-	return sourceName + "-- " + destinationName, true
+	if sourceOK && destinationOK {
+		return sourceName + "-- " + destinationName, true
+	}
+	if sourceOK {
+		return sourceName + "-- " + originalName, true
+	}
+	if destinationOK {
+		return originalName + "-- " + destinationName, true
+	}
+	return "", false
 }
 
 func buildPlatformIPSystemNameMap(rows []models.SystemPlatformRequest) map[string]string {

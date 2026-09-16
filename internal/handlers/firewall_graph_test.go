@@ -186,3 +186,80 @@ func TestCreateSystemPlatformRequestSyncsFirewallNames(t *testing.T) {
 		t.Fatalf("SystemName = %q, want %q", got.SystemName, want)
 	}
 }
+
+func TestSyncFirewallPlatformSystemNamesKeepsOriginalNameForOneSidedMatches(t *testing.T) {
+	tempDB := filepath.Join(t.TempDir(), "test_firewall_one_sided_platform_names.db")
+	database, err := db.New(tempDB)
+	if err != nil {
+		t.Fatalf("failed to create temp db: %v", err)
+	}
+	defer database.Close()
+
+	h := New(database, nil)
+	sourcePlatform := models.SystemPlatformRequest{
+		SystemName:      "來源單邊平台",
+		EnvironmentType: "正式環境",
+		AssignedIP:      "10.40.1.10",
+		Status:          "active",
+	}
+	if _, err := database.CreateSystemPlatformRequest(&sourcePlatform); err != nil {
+		t.Fatalf("CreateSystemPlatformRequest source failed: %v", err)
+	}
+	destinationPlatform := models.SystemPlatformRequest{
+		SystemName:      "目的單邊平台",
+		EnvironmentType: "開發環境",
+		AssignedIP:      "10.40.1.30",
+		Status:          "active",
+	}
+	if _, err := database.CreateSystemPlatformRequest(&destinationPlatform); err != nil {
+		t.Fatalf("CreateSystemPlatformRequest destination failed: %v", err)
+	}
+
+	sourceOnly := models.FirewallRequest{
+		SystemName:    "原本來源單邊名稱",
+		Action:        "允許",
+		SourceIP:      "10.40.1.10/32",
+		DestinationIP: "10.40.1.99",
+		ProtocolType:  "TCP: 443",
+		FirewallID:    "FW-SOURCE-ONLY",
+		Status:        "active",
+	}
+	if _, err := database.CreateFirewallRequest(&sourceOnly); err != nil {
+		t.Fatalf("CreateFirewallRequest source-only failed: %v", err)
+	}
+	destinationOnly := models.FirewallRequest{
+		SystemName:    "原本目的單邊名稱",
+		Action:        "允許",
+		SourceIP:      "10.40.1.98",
+		DestinationIP: "10.40.1.30/32",
+		ProtocolType:  "TCP: 443",
+		FirewallID:    "FW-DESTINATION-ONLY",
+		Status:        "active",
+	}
+	if _, err := database.CreateFirewallRequest(&destinationOnly); err != nil {
+		t.Fatalf("CreateFirewallRequest destination-only failed: %v", err)
+	}
+
+	result, err := h.SyncFirewallPlatformSystemNames("")
+	if err != nil {
+		t.Fatalf("SyncFirewallPlatformSystemNames failed: %v", err)
+	}
+	if result.Matched != 2 || result.Updated != 2 {
+		t.Fatalf("sync result = %+v, want matched=2 updated=2", result)
+	}
+
+	rows, err := database.ListFirewallRequests()
+	if err != nil {
+		t.Fatalf("ListFirewallRequests failed: %v", err)
+	}
+	got := map[string]string{}
+	for _, row := range rows {
+		got[row.FirewallID] = row.SystemName
+	}
+	if got["FW-SOURCE-ONLY"] != "來源單邊平台（正式環境）-- 原本來源單邊名稱" {
+		t.Fatalf("source-only SystemName = %q", got["FW-SOURCE-ONLY"])
+	}
+	if got["FW-DESTINATION-ONLY"] != "原本目的單邊名稱-- 目的單邊平台（開發環境）" {
+		t.Fatalf("destination-only SystemName = %q", got["FW-DESTINATION-ONLY"])
+	}
+}
