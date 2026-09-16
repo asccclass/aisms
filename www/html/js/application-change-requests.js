@@ -1,8 +1,8 @@
 (function () {
   const modalRootId = 'feature-application-change-modal-root';
-  const modalPartialPath = '/partials/application-change-request-modal.html?v=20260916-record-number';
+  const modalPartialPath = '/partials/application-change-request-modal.html?v=20260916-scan-file-url';
   const fields = [
-    'suggestor', 'form_date', 'record_number', 'approver', 'related_system', 'system_name', 'feature_name',
+    'suggestor', 'form_date', 'record_number', 'scan_file_url', 'approver', 'related_system', 'system_name', 'feature_name',
     'is_required_feature', 'is_major_impact', 'expected_online_date',
     'background_description', 'existing_security_measures', 'security_scope_involved',
     'access_control_measures', 'audit_measures', 'continuity_measures',
@@ -87,13 +87,14 @@
     const tbody = document.getElementById('application-change-requests-body');
     if (!tbody) return;
     if (!list || !list.length) {
-      tbody.innerHTML = `<tr><td colspan="10"><div class="empty"><p>尚無功能需求更新建議資料</p></div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="11"><div class="empty"><p>尚無功能需求更新建議資料</p></div></td></tr>`;
       return;
     }
     tbody.innerHTML = list.map(item => `
       <tr>
         <td style="color:var(--text-muted);font-size:12px;">#${item.id}</td>
         <td>${esc(item.record_number || '—')}</td>
+        <td>${item.scan_file_url ? `<a href="${escAttr(item.scan_file_url)}" target="_blank" rel="noopener">掃描檔</a>` : '—'}</td>
         <td>${esc(item.system_name)}<br><span class="hint">${esc(item.feature_name)}</span></td>
         <td>${esc(item.related_system || '—')}</td>
         <td>${esc(item.suggestor)}<br><span class="hint">${esc(formatDate(item.form_date))}</span></td>
