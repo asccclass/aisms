@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -38,6 +39,8 @@ var dashboardProviders = []models.DashboardFormProvider{
 	{Key: "placeholder", Label: "示範骨架 / 尚未接資料", Description: "保留表單卡片與說明，首頁顯示空狀態"},
 	{Key: "custom_table_template", Label: "自訂資料表範本", Description: "作為未來接新資料表的 provider 樣板，預設先回傳空資料"},
 }
+
+var ipAddressPattern = regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?\b`)
 
 func New(d *db.DB, m *mailer.Mailer) *Handler {
 	return &Handler{DB: d, Mailer: m}
@@ -179,11 +182,13 @@ func firstNonEmpty(values ...string) string {
 // ---- System Platform Requests CRUD ----
 
 func (h *Handler) ListFirewallRequests(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.DB.ListFirewallRequestsByCreator(GetUserEmail(r))
+	creator := GetUserEmail(r)
+	rows, err := h.DB.ListFirewallRequestsByCreator(creator)
 	if err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return
 	}
+	rows = h.withPlatformSystemNames(rows, creator)
 	writeJSON(w, 200, rows)
 }
 
@@ -521,6 +526,76 @@ func (h *Handler) GetFirewallRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, row)
+}
+
+func (h *Handler) withPlatformSystemNames(rows []models.FirewallRequest, creator string) []models.FirewallRequest {
+	if len(rows) == 0 {
+		return rows
+	}
+	platformRows, err := h.DB.ListSystemPlatformRequestsByCreator(creator)
+	if err != nil || len(platformRows) == 0 {
+		return rows
+	}
+	ipToSystemName := buildPlatformIPSystemNameMap(platformRows)
+	if len(ipToSystemName) == 0 {
+		return rows
+	}
+	result := make([]models.FirewallRequest, len(rows))
+	copy(result, rows)
+	for i := range result {
+		sourceName, sourceOK := resolvePlatformSystemName(result[i].SourceIP, ipToSystemName)
+		destinationName, destinationOK := resolvePlatformSystemName(result[i].DestinationIP, ipToSystemName)
+		if sourceOK && destinationOK {
+			result[i].SystemName = sourceName + "--" + destinationName
+		}
+	}
+	return result
+}
+
+func buildPlatformIPSystemNameMap(rows []models.SystemPlatformRequest) map[string]string {
+	result := make(map[string]string)
+	for _, row := range rows {
+		systemName := strings.TrimSpace(row.SystemName)
+		if systemName == "" {
+			continue
+		}
+		for _, ip := range extractIPCandidates(row.IPRestriction) {
+			if _, exists := result[ip]; !exists {
+				result[ip] = systemName
+			}
+		}
+	}
+	return result
+}
+
+func resolvePlatformSystemName(value string, ipToSystemName map[string]string) (string, bool) {
+	for _, ip := range extractIPCandidates(value) {
+		if name, ok := ipToSystemName[ip]; ok {
+			return name, true
+		}
+	}
+	return "", false
+}
+
+func extractIPCandidates(value string) []string {
+	matches := ipAddressPattern.FindAllString(value, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	result := make([]string, 0, len(matches)*2)
+	seen := make(map[string]bool)
+	for _, match := range matches {
+		normalized := strings.TrimSpace(match)
+		base := strings.SplitN(normalized, "/", 2)[0]
+		for _, candidate := range []string{normalized, base} {
+			if candidate == "" || seen[candidate] {
+				continue
+			}
+			seen[candidate] = true
+			result = append(result, candidate)
+		}
+	}
+	return result
 }
 
 func (h *Handler) CreateFirewallRequest(w http.ResponseWriter, r *http.Request) {
@@ -1245,6 +1320,7 @@ func (h *Handler) loadFirewallRequestDashboardRecords(creator string) ([]models.
 	if err != nil {
 		return nil, err
 	}
+	rows = h.withPlatformSystemNames(rows, creator)
 	records := make([]models.DashboardRecord, 0, len(rows))
 	for _, row := range rows {
 		secondary := strings.TrimSpace(row.FirewallZone)
