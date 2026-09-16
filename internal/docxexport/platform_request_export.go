@@ -102,6 +102,10 @@ func buildPlatformRequestTableXML(req models.SystemPlatformRequest) string {
 			valueCell(req.IPRestriction, 1),
 		) +
 		tableRowXML(
+			labelCell("配置IP", 1),
+			valueCell(req.AssignedIP, 5),
+		) +
+		tableRowXML(
 			labelCell("申請期間", 1),
 			valueCell(strings.TrimSpace(datefmt.NormalizeDate(req.RequestStartDate)+" 至 "+datefmt.NormalizeDate(req.RequestEndDate)), 5),
 		) +

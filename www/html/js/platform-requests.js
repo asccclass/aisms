@@ -7,7 +7,7 @@
   const fields = [
     'request_date', 'applicant_name', 'applicant_department', 'applicant_title',
     'office_phone', 'email', 'pi_name', 'system_name', 'system_alias',
-    'system_purpose', 'estimated_users', 'internal_only', 'ip_restriction',
+    'system_purpose', 'estimated_users', 'internal_only', 'ip_restriction', 'assigned_ip',
     'request_start_date', 'request_end_date', 'request_type', 'shutdown_retain_months',
     'shutdown_reason', 'environment_type', 'operating_system',
     'operating_system_other', 'disk_size', 'special_requirements',
@@ -111,7 +111,7 @@
     const tbody = document.getElementById('platform-requests-body');
     if (!tbody) return;
     if (!list || !list.length) {
-      tbody.innerHTML = `<tr><td colspan="9"><div class="empty"><div class="icon">🖥️</div><p>尚無申請資料</p></div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="10"><div class="empty"><div class="icon">🖥️</div><p>尚無申請資料</p></div></td></tr>`;
       return;
     }
     tbody.innerHTML = list.map(item => `
@@ -121,6 +121,7 @@
         <td>${esc(item.applicant_name)}<br><span class="hint">${esc(item.applicant_department)}</span></td>
         <td>${esc(item.request_type)}<br><span class="hint">${esc(formatDate(item.request_date))}</span></td>
         <td>${esc(item.operating_system)}<br><span class="hint">${esc(item.disk_size)}</span></td>
+        <td><span class="mono">${esc(item.assigned_ip || '—')}</span><br><span class="hint">${esc(item.ip_restriction || '')}</span></td>
         <td>${esc(formatDate(item.request_start_date))}<br><span class="hint">${esc(formatDate(item.request_end_date))}</span></td>
         <td>${esc(item.email)}</td>
         <td>${statusBadge(item.status)}</td>

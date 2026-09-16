@@ -60,7 +60,8 @@ func TestListFirewallRequestsUsesPlatformSystemNames(t *testing.T) {
 	h := New(database, nil)
 	sourcePlatform := models.SystemPlatformRequest{
 		SystemName:    "來源平台系統",
-		IPRestriction: "10.10.1.5/32",
+		AssignedIP:    "10.10.1.5/32",
+		IPRestriction: "10.20.0.0/24",
 		Status:        "active",
 	}
 	if _, err := database.CreateSystemPlatformRequest(&sourcePlatform); err != nil {
@@ -68,7 +69,8 @@ func TestListFirewallRequestsUsesPlatformSystemNames(t *testing.T) {
 	}
 	destinationPlatform := models.SystemPlatformRequest{
 		SystemName:    "目的平台系統",
-		IPRestriction: "172.16.8.20",
+		AssignedIP:    "172.16.8.20",
+		IPRestriction: "172.16.0.0/16",
 		Status:        "active",
 	}
 	if _, err := database.CreateSystemPlatformRequest(&destinationPlatform); err != nil {

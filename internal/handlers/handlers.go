@@ -559,7 +559,7 @@ func buildPlatformIPSystemNameMap(rows []models.SystemPlatformRequest) map[strin
 		if systemName == "" {
 			continue
 		}
-		for _, ip := range extractIPCandidates(row.IPRestriction) {
+		for _, ip := range extractIPCandidates(row.AssignedIP + " " + row.IPRestriction) {
 			if _, exists := result[ip]; !exists {
 				result[ip] = systemName
 			}

@@ -123,7 +123,7 @@ function buildPlatformIPMap(platformRequests) {
   platformRequests.forEach(item => {
     const systemName = normalizeName(item.system_name, '');
     if (!systemName) return;
-    extractIPs(item.ip_restriction).forEach(ip => {
+    extractIPs(`${item.assigned_ip || ''} ${item.ip_restriction || ''}`).forEach(ip => {
       if (!result.has(ip)) result.set(ip, systemName);
     });
   });
@@ -382,13 +382,17 @@ function buildNodeTooltipHTML(node) {
 
   if (node.type === 'host') {
     const platformReq = graph.platformRequests.find(p => normalizeName(p.system_name, '') === node.name);
-    const platformIP = platformReq?.ip_restriction?.trim();
+    const platformIP = platformReq?.assigned_ip?.trim();
+    const platformIPRestriction = platformReq?.ip_restriction?.trim();
 
     const relatedSrcIPs = Array.from(new Set(node.rules.map(r => r.source_ip).filter(Boolean)));
     const relatedDstIPs = Array.from(new Set(node.rules.map(r => r.destination_ip).filter(Boolean)));
 
     if (platformIP) {
-      ipContent += `<div><span style="color:#94a3b8;">主機 IP/限制：</span><strong style="color:#38bdf8;">${esc(platformIP)}</strong></div>`;
+      ipContent += `<div><span style="color:#94a3b8;">配置 IP：</span><strong style="color:#38bdf8;">${esc(platformIP)}</strong></div>`;
+    }
+    if (platformIPRestriction) {
+      ipContent += `<div><span style="color:#94a3b8;">IP 位址限制：</span><strong style="color:#38bdf8;">${esc(platformIPRestriction)}</strong></div>`;
     }
     if (relatedSrcIPs.length) {
       const srcDisplay = relatedSrcIPs.slice(0, 3).join(', ') + (relatedSrcIPs.length > 3 ? ` 等 ${relatedSrcIPs.length} 個` : '');
@@ -398,7 +402,7 @@ function buildNodeTooltipHTML(node) {
       const dstDisplay = relatedDstIPs.slice(0, 3).join(', ') + (relatedDstIPs.length > 3 ? ` 等 ${relatedDstIPs.length} 個` : '');
       ipContent += `<div><span style="color:#94a3b8;">關聯目的 IP：</span>${esc(dstDisplay)}</div>`;
     }
-    if (!platformIP && !relatedSrcIPs.length && !relatedDstIPs.length) {
+    if (!platformIP && !platformIPRestriction && !relatedSrcIPs.length && !relatedDstIPs.length) {
       ipContent += `<div><span style="color:#94a3b8;">IP 資訊：</span>尚未指定</div>`;
     }
 

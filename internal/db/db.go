@@ -129,6 +129,7 @@ func (d *DB) migrate() error {
 		estimated_users        TEXT    NOT NULL DEFAULT '',
 		internal_only          TEXT    NOT NULL DEFAULT '是',
 		ip_restriction         TEXT    NOT NULL DEFAULT '',
+		assigned_ip            TEXT    NOT NULL DEFAULT '',
 		request_start_date     TEXT    NOT NULL DEFAULT '',
 		request_end_date       TEXT    NOT NULL DEFAULT '',
 		request_type           TEXT    NOT NULL DEFAULT '上架新增',
@@ -292,6 +293,7 @@ func (d *DB) migrate() error {
 	_, _ = d.conn.Exec(`ALTER TABLE privileged_accounts ADD COLUMN creator TEXT NOT NULL DEFAULT ''`)
 	_, _ = d.conn.Exec(`ALTER TABLE asset_inventory_records ADD COLUMN environment TEXT NOT NULL DEFAULT '正式'`)
 	_, _ = d.conn.Exec(`ALTER TABLE application_change_requests ADD COLUMN related_system TEXT NOT NULL DEFAULT ''`)
+	_, _ = d.conn.Exec(`ALTER TABLE system_platform_requests ADD COLUMN assigned_ip TEXT NOT NULL DEFAULT ''`)
 	if err == nil {
 		_ = d.seedDashboardForms()
 		_ = d.seedCustomTableTemplateRecords()
@@ -1074,7 +1076,7 @@ func (d *DB) ListSystemPlatformRequests() ([]models.SystemPlatformRequest, error
 }
 
 func (d *DB) ListSystemPlatformRequestsByCreator(creator string) ([]models.SystemPlatformRequest, error) {
-	query := `SELECT id,request_date,applicant_name,applicant_department,applicant_title,office_phone,email,pi_name,system_name,system_alias,system_purpose,estimated_users,internal_only,ip_restriction,request_start_date,request_end_date,request_type,shutdown_retain_months,shutdown_reason,environment_type,operating_system,operating_system_other,disk_size,special_requirements,domain_settings,other_requirements,backup_required,backup_requirements,backup_reason,applicant_signature,supervisor_signature,status,creator,remarks,created_at,updated_at FROM system_platform_requests`
+	query := `SELECT id,request_date,applicant_name,applicant_department,applicant_title,office_phone,email,pi_name,system_name,system_alias,system_purpose,estimated_users,internal_only,ip_restriction,assigned_ip,request_start_date,request_end_date,request_type,shutdown_retain_months,shutdown_reason,environment_type,operating_system,operating_system_other,disk_size,special_requirements,domain_settings,other_requirements,backup_required,backup_requirements,backup_reason,applicant_signature,supervisor_signature,status,creator,remarks,created_at,updated_at FROM system_platform_requests`
 	args := []interface{}{}
 	if strings.TrimSpace(creator) != "" {
 		query += ` WHERE creator=?`
@@ -1089,7 +1091,7 @@ func (d *DB) ListSystemPlatformRequestsByCreator(creator string) ([]models.Syste
 	var list []models.SystemPlatformRequest
 	for rows.Next() {
 		var r models.SystemPlatformRequest
-		if err := rows.Scan(&r.ID, &r.RequestDate, &r.ApplicantName, &r.ApplicantDepartment, &r.ApplicantTitle, &r.OfficePhone, &r.Email, &r.PIName, &r.SystemName, &r.SystemAlias, &r.SystemPurpose, &r.EstimatedUsers, &r.InternalOnly, &r.IPRestriction, &r.RequestStartDate, &r.RequestEndDate, &r.RequestType, &r.ShutdownRetainMonths, &r.ShutdownReason, &r.EnvironmentType, &r.OperatingSystem, &r.OperatingSystemOther, &r.DiskSize, &r.SpecialRequirements, &r.DomainSettings, &r.OtherRequirements, &r.BackupRequired, &r.BackupRequirements, &r.BackupReason, &r.ApplicantSignature, &r.SupervisorSignature, &r.Status, &r.Creator, &r.Remarks, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.RequestDate, &r.ApplicantName, &r.ApplicantDepartment, &r.ApplicantTitle, &r.OfficePhone, &r.Email, &r.PIName, &r.SystemName, &r.SystemAlias, &r.SystemPurpose, &r.EstimatedUsers, &r.InternalOnly, &r.IPRestriction, &r.AssignedIP, &r.RequestStartDate, &r.RequestEndDate, &r.RequestType, &r.ShutdownRetainMonths, &r.ShutdownReason, &r.EnvironmentType, &r.OperatingSystem, &r.OperatingSystemOther, &r.DiskSize, &r.SpecialRequirements, &r.DomainSettings, &r.OtherRequirements, &r.BackupRequired, &r.BackupRequirements, &r.BackupReason, &r.ApplicantSignature, &r.SupervisorSignature, &r.Status, &r.Creator, &r.Remarks, &r.CreatedAt, &r.UpdatedAt); err != nil {
 			return nil, err
 		}
 		list = append(list, r)
@@ -1105,7 +1107,7 @@ func (d *DB) GetSystemPlatformRequest(id int) (*models.SystemPlatformRequest, er
 }
 
 func (d *DB) GetSystemPlatformRequestByCreator(id int, creator string) (*models.SystemPlatformRequest, error) {
-	query := `SELECT id,request_date,applicant_name,applicant_department,applicant_title,office_phone,email,pi_name,system_name,system_alias,system_purpose,estimated_users,internal_only,ip_restriction,request_start_date,request_end_date,request_type,shutdown_retain_months,shutdown_reason,environment_type,operating_system,operating_system_other,disk_size,special_requirements,domain_settings,other_requirements,backup_required,backup_requirements,backup_reason,applicant_signature,supervisor_signature,status,creator,remarks,created_at,updated_at FROM system_platform_requests WHERE id=?`
+	query := `SELECT id,request_date,applicant_name,applicant_department,applicant_title,office_phone,email,pi_name,system_name,system_alias,system_purpose,estimated_users,internal_only,ip_restriction,assigned_ip,request_start_date,request_end_date,request_type,shutdown_retain_months,shutdown_reason,environment_type,operating_system,operating_system_other,disk_size,special_requirements,domain_settings,other_requirements,backup_required,backup_requirements,backup_reason,applicant_signature,supervisor_signature,status,creator,remarks,created_at,updated_at FROM system_platform_requests WHERE id=?`
 	args := []interface{}{id}
 	if strings.TrimSpace(creator) != "" {
 		query += ` AND creator=?`
@@ -1113,15 +1115,15 @@ func (d *DB) GetSystemPlatformRequestByCreator(id int, creator string) (*models.
 	}
 	row := d.conn.QueryRow(query, args...)
 	var r models.SystemPlatformRequest
-	if err := row.Scan(&r.ID, &r.RequestDate, &r.ApplicantName, &r.ApplicantDepartment, &r.ApplicantTitle, &r.OfficePhone, &r.Email, &r.PIName, &r.SystemName, &r.SystemAlias, &r.SystemPurpose, &r.EstimatedUsers, &r.InternalOnly, &r.IPRestriction, &r.RequestStartDate, &r.RequestEndDate, &r.RequestType, &r.ShutdownRetainMonths, &r.ShutdownReason, &r.EnvironmentType, &r.OperatingSystem, &r.OperatingSystemOther, &r.DiskSize, &r.SpecialRequirements, &r.DomainSettings, &r.OtherRequirements, &r.BackupRequired, &r.BackupRequirements, &r.BackupReason, &r.ApplicantSignature, &r.SupervisorSignature, &r.Status, &r.Creator, &r.Remarks, &r.CreatedAt, &r.UpdatedAt); err != nil {
+	if err := row.Scan(&r.ID, &r.RequestDate, &r.ApplicantName, &r.ApplicantDepartment, &r.ApplicantTitle, &r.OfficePhone, &r.Email, &r.PIName, &r.SystemName, &r.SystemAlias, &r.SystemPurpose, &r.EstimatedUsers, &r.InternalOnly, &r.IPRestriction, &r.AssignedIP, &r.RequestStartDate, &r.RequestEndDate, &r.RequestType, &r.ShutdownRetainMonths, &r.ShutdownReason, &r.EnvironmentType, &r.OperatingSystem, &r.OperatingSystemOther, &r.DiskSize, &r.SpecialRequirements, &r.DomainSettings, &r.OtherRequirements, &r.BackupRequired, &r.BackupRequirements, &r.BackupReason, &r.ApplicantSignature, &r.SupervisorSignature, &r.Status, &r.Creator, &r.Remarks, &r.CreatedAt, &r.UpdatedAt); err != nil {
 		return nil, err
 	}
 	return &r, nil
 }
 
 func (d *DB) CreateSystemPlatformRequest(r *models.SystemPlatformRequest) (int64, error) {
-	res, err := d.conn.Exec(`INSERT INTO system_platform_requests (request_date,applicant_name,applicant_department,applicant_title,office_phone,email,pi_name,system_name,system_alias,system_purpose,estimated_users,internal_only,ip_restriction,request_start_date,request_end_date,request_type,shutdown_retain_months,shutdown_reason,environment_type,operating_system,operating_system_other,disk_size,special_requirements,domain_settings,other_requirements,backup_required,backup_requirements,backup_reason,applicant_signature,supervisor_signature,status,creator,remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		r.RequestDate, r.ApplicantName, r.ApplicantDepartment, r.ApplicantTitle, r.OfficePhone, r.Email, r.PIName, r.SystemName, r.SystemAlias, r.SystemPurpose, r.EstimatedUsers, r.InternalOnly, r.IPRestriction, r.RequestStartDate, r.RequestEndDate, r.RequestType, r.ShutdownRetainMonths, r.ShutdownReason, r.EnvironmentType, r.OperatingSystem, r.OperatingSystemOther, r.DiskSize, r.SpecialRequirements, r.DomainSettings, r.OtherRequirements, r.BackupRequired, r.BackupRequirements, r.BackupReason, r.ApplicantSignature, r.SupervisorSignature, r.Status, r.Creator, r.Remarks)
+	res, err := d.conn.Exec(`INSERT INTO system_platform_requests (request_date,applicant_name,applicant_department,applicant_title,office_phone,email,pi_name,system_name,system_alias,system_purpose,estimated_users,internal_only,ip_restriction,assigned_ip,request_start_date,request_end_date,request_type,shutdown_retain_months,shutdown_reason,environment_type,operating_system,operating_system_other,disk_size,special_requirements,domain_settings,other_requirements,backup_required,backup_requirements,backup_reason,applicant_signature,supervisor_signature,status,creator,remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		r.RequestDate, r.ApplicantName, r.ApplicantDepartment, r.ApplicantTitle, r.OfficePhone, r.Email, r.PIName, r.SystemName, r.SystemAlias, r.SystemPurpose, r.EstimatedUsers, r.InternalOnly, r.IPRestriction, r.AssignedIP, r.RequestStartDate, r.RequestEndDate, r.RequestType, r.ShutdownRetainMonths, r.ShutdownReason, r.EnvironmentType, r.OperatingSystem, r.OperatingSystemOther, r.DiskSize, r.SpecialRequirements, r.DomainSettings, r.OtherRequirements, r.BackupRequired, r.BackupRequirements, r.BackupReason, r.ApplicantSignature, r.SupervisorSignature, r.Status, r.Creator, r.Remarks)
 	if err != nil {
 		return 0, err
 	}
@@ -1129,8 +1131,8 @@ func (d *DB) CreateSystemPlatformRequest(r *models.SystemPlatformRequest) (int64
 }
 
 func (d *DB) UpdateSystemPlatformRequest(r *models.SystemPlatformRequest) error {
-	_, err := d.conn.Exec(`UPDATE system_platform_requests SET request_date=?,applicant_name=?,applicant_department=?,applicant_title=?,office_phone=?,email=?,pi_name=?,system_name=?,system_alias=?,system_purpose=?,estimated_users=?,internal_only=?,ip_restriction=?,request_start_date=?,request_end_date=?,request_type=?,shutdown_retain_months=?,shutdown_reason=?,environment_type=?,operating_system=?,operating_system_other=?,disk_size=?,special_requirements=?,domain_settings=?,other_requirements=?,backup_required=?,backup_requirements=?,backup_reason=?,applicant_signature=?,supervisor_signature=?,status=?,creator=?,remarks=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`,
-		r.RequestDate, r.ApplicantName, r.ApplicantDepartment, r.ApplicantTitle, r.OfficePhone, r.Email, r.PIName, r.SystemName, r.SystemAlias, r.SystemPurpose, r.EstimatedUsers, r.InternalOnly, r.IPRestriction, r.RequestStartDate, r.RequestEndDate, r.RequestType, r.ShutdownRetainMonths, r.ShutdownReason, r.EnvironmentType, r.OperatingSystem, r.OperatingSystemOther, r.DiskSize, r.SpecialRequirements, r.DomainSettings, r.OtherRequirements, r.BackupRequired, r.BackupRequirements, r.BackupReason, r.ApplicantSignature, r.SupervisorSignature, r.Status, r.Creator, r.Remarks, r.ID)
+	_, err := d.conn.Exec(`UPDATE system_platform_requests SET request_date=?,applicant_name=?,applicant_department=?,applicant_title=?,office_phone=?,email=?,pi_name=?,system_name=?,system_alias=?,system_purpose=?,estimated_users=?,internal_only=?,ip_restriction=?,assigned_ip=?,request_start_date=?,request_end_date=?,request_type=?,shutdown_retain_months=?,shutdown_reason=?,environment_type=?,operating_system=?,operating_system_other=?,disk_size=?,special_requirements=?,domain_settings=?,other_requirements=?,backup_required=?,backup_requirements=?,backup_reason=?,applicant_signature=?,supervisor_signature=?,status=?,creator=?,remarks=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+		r.RequestDate, r.ApplicantName, r.ApplicantDepartment, r.ApplicantTitle, r.OfficePhone, r.Email, r.PIName, r.SystemName, r.SystemAlias, r.SystemPurpose, r.EstimatedUsers, r.InternalOnly, r.IPRestriction, r.AssignedIP, r.RequestStartDate, r.RequestEndDate, r.RequestType, r.ShutdownRetainMonths, r.ShutdownReason, r.EnvironmentType, r.OperatingSystem, r.OperatingSystemOther, r.DiskSize, r.SpecialRequirements, r.DomainSettings, r.OtherRequirements, r.BackupRequired, r.BackupRequirements, r.BackupReason, r.ApplicantSignature, r.SupervisorSignature, r.Status, r.Creator, r.Remarks, r.ID)
 	return err
 }
 

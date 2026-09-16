@@ -18,6 +18,7 @@ type SystemPlatformRequest struct {
 	EstimatedUsers       string    `json:"estimated_users"`
 	InternalOnly         string    `json:"internal_only"`
 	IPRestriction        string    `json:"ip_restriction"`
+	AssignedIP           string    `json:"assigned_ip"`
 	RequestStartDate     string    `json:"request_start_date"`
 	RequestEndDate       string    `json:"request_end_date"`
 	RequestType          string    `json:"request_type"`
