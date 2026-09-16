@@ -592,20 +592,56 @@ func (h *Handler) SyncFirewallPlatformSystemNames(creator string) (*models.Firew
 func (h *Handler) resolveFirewallPlatformSystemName(row models.FirewallRequest, ipToSystemName map[string]string) (string, bool) {
 	sourceName, sourceOK := resolvePlatformSystemName(row.SourceIP, ipToSystemName)
 	destinationName, destinationOK := resolvePlatformSystemName(row.DestinationIP, ipToSystemName)
-	originalName := strings.TrimSpace(row.SystemName)
-	if originalName == "" {
-		originalName = "未命名系統"
-	}
 	if sourceOK && destinationOK {
 		return sourceName + "-- " + destinationName, true
 	}
 	if sourceOK {
+		originalName := originalFirewallSystemNameSuffix(row.SystemName)
+		if originalName == "" {
+			originalName = "未命名系統"
+		}
 		return sourceName + "-- " + originalName, true
 	}
 	if destinationOK {
+		originalName := originalFirewallSystemNamePrefix(row.SystemName)
+		if originalName == "" {
+			originalName = "未命名系統"
+		}
 		return originalName + "-- " + destinationName, true
 	}
 	return "", false
+}
+
+func originalFirewallSystemNameSuffix(systemName string) string {
+	normalized := strings.TrimSpace(systemName)
+	if normalized == "" {
+		return ""
+	}
+	if strings.Contains(normalized, "-- ") {
+		parts := strings.Split(normalized, "-- ")
+		return strings.TrimSpace(parts[len(parts)-1])
+	}
+	if strings.Contains(normalized, "--") {
+		parts := strings.Split(normalized, "--")
+		return strings.TrimSpace(parts[len(parts)-1])
+	}
+	return normalized
+}
+
+func originalFirewallSystemNamePrefix(systemName string) string {
+	normalized := strings.TrimSpace(systemName)
+	if normalized == "" {
+		return ""
+	}
+	if strings.Contains(normalized, "-- ") {
+		parts := strings.Split(normalized, "-- ")
+		return strings.TrimSpace(parts[0])
+	}
+	if strings.Contains(normalized, "--") {
+		parts := strings.Split(normalized, "--")
+		return strings.TrimSpace(parts[0])
+	}
+	return normalized
 }
 
 func buildPlatformIPSystemNameMap(rows []models.SystemPlatformRequest) map[string]string {

@@ -263,3 +263,63 @@ func TestSyncFirewallPlatformSystemNamesKeepsOriginalNameForOneSidedMatches(t *t
 		t.Fatalf("destination-only SystemName = %q", got["FW-DESTINATION-ONLY"])
 	}
 }
+
+func TestSyncFirewallPlatformSystemNamesDoesNotRepeatSyncedNames(t *testing.T) {
+	tempDB := filepath.Join(t.TempDir(), "test_firewall_no_repeat_platform_names.db")
+	database, err := db.New(tempDB)
+	if err != nil {
+		t.Fatalf("failed to create temp db: %v", err)
+	}
+	defer database.Close()
+
+	h := New(database, nil)
+	platform := models.SystemPlatformRequest{
+		SystemName:      "中研院RAG服務",
+		EnvironmentType: "開發環境",
+		AssignedIP:      "10.50.1.30",
+		Status:          "active",
+	}
+	if _, err := database.CreateSystemPlatformRequest(&platform); err != nil {
+		t.Fatalf("CreateSystemPlatformRequest failed: %v", err)
+	}
+	firewallReq := models.FirewallRequest{
+		SystemName:    "ASRAG",
+		Action:        "允許",
+		SourceIP:      "10.50.1.98",
+		DestinationIP: "10.50.1.30/32",
+		ProtocolType:  "TCP: 443",
+		FirewallID:    "FW-NO-REPEAT",
+		Status:        "active",
+	}
+	if _, err := database.CreateFirewallRequest(&firewallReq); err != nil {
+		t.Fatalf("CreateFirewallRequest failed: %v", err)
+	}
+
+	first, err := h.SyncFirewallPlatformSystemNames("")
+	if err != nil {
+		t.Fatalf("first SyncFirewallPlatformSystemNames failed: %v", err)
+	}
+	second, err := h.SyncFirewallPlatformSystemNames("")
+	if err != nil {
+		t.Fatalf("second SyncFirewallPlatformSystemNames failed: %v", err)
+	}
+	if first.Updated != 1 || second.Updated != 0 {
+		t.Fatalf("sync updates = first:%d second:%d, want 1 then 0", first.Updated, second.Updated)
+	}
+
+	rows, err := database.ListFirewallRequests()
+	if err != nil {
+		t.Fatalf("ListFirewallRequests failed: %v", err)
+	}
+	var got string
+	for _, row := range rows {
+		if row.FirewallID == "FW-NO-REPEAT" {
+			got = row.SystemName
+			break
+		}
+	}
+	want := "ASRAG-- 中研院RAG服務（開發環境）"
+	if got != want {
+		t.Fatalf("SystemName = %q, want %q", got, want)
+	}
+}
