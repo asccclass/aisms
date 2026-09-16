@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"isms-privilege/internal/models"
+	"net/netip"
+	"sort"
 	"strings"
 	"time"
 
@@ -1099,7 +1101,40 @@ func (d *DB) ListSystemPlatformRequestsByCreator(creator string) ([]models.Syste
 	if list == nil {
 		list = []models.SystemPlatformRequest{}
 	}
+	sortSystemPlatformRequestsByAssignedIP(list)
 	return list, nil
+}
+
+func sortSystemPlatformRequestsByAssignedIP(list []models.SystemPlatformRequest) {
+	sort.SliceStable(list, func(i, j int) bool {
+		leftIP, leftOK := firstSortableIP(list[i].AssignedIP)
+		rightIP, rightOK := firstSortableIP(list[j].AssignedIP)
+		if leftOK != rightOK {
+			return leftOK
+		}
+		if leftOK && rightOK && leftIP != rightIP {
+			return leftIP.Compare(rightIP) < 0
+		}
+		return list[i].ID > list[j].ID
+	})
+}
+
+func firstSortableIP(value string) (netip.Addr, bool) {
+	for _, token := range strings.FieldsFunc(value, func(r rune) bool {
+		return r == ',' || r == ';' || r == '，' || r == '；' || r == '\n' || r == '\r' || r == '\t' || r == ' '
+	}) {
+		token = strings.TrimSpace(token)
+		if token == "" {
+			continue
+		}
+		if prefix, err := netip.ParsePrefix(token); err == nil {
+			return prefix.Addr(), true
+		}
+		if addr, err := netip.ParseAddr(token); err == nil {
+			return addr, true
+		}
+	}
+	return netip.Addr{}, false
 }
 
 func (d *DB) GetSystemPlatformRequest(id int) (*models.SystemPlatformRequest, error) {
