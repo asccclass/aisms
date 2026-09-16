@@ -59,19 +59,21 @@ func TestListFirewallRequestsUsesPlatformSystemNames(t *testing.T) {
 
 	h := New(database, nil)
 	sourcePlatform := models.SystemPlatformRequest{
-		SystemName:    "來源平台系統",
-		AssignedIP:    "10.10.1.5/32",
-		IPRestriction: "10.20.0.0/24",
-		Status:        "active",
+		SystemName:      "來源平台系統",
+		AssignedIP:      "10.10.1.5/32",
+		IPRestriction:   "10.20.0.0/24",
+		EnvironmentType: "正式環境",
+		Status:          "active",
 	}
 	if _, err := database.CreateSystemPlatformRequest(&sourcePlatform); err != nil {
 		t.Fatalf("CreateSystemPlatformRequest source failed: %v", err)
 	}
 	destinationPlatform := models.SystemPlatformRequest{
-		SystemName:    "目的平台系統",
-		AssignedIP:    "172.16.8.20",
-		IPRestriction: "172.16.0.0/16",
-		Status:        "active",
+		SystemName:      "目的平台系統",
+		AssignedIP:      "172.16.8.20",
+		IPRestriction:   "172.16.0.0/16",
+		EnvironmentType: "測試環境",
+		Status:          "active",
 	}
 	if _, err := database.CreateSystemPlatformRequest(&destinationPlatform); err != nil {
 		t.Fatalf("CreateSystemPlatformRequest destination failed: %v", err)
@@ -112,7 +114,7 @@ func TestListFirewallRequestsUsesPlatformSystemNames(t *testing.T) {
 	if got == nil {
 		t.Fatalf("ListFirewallRequests did not return FW-TEST-078; got %d items", len(list))
 	}
-	want := "來源平台系統--目的平台系統"
+	want := "來源平台系統（正式環境）--目的平台系統（測試環境）"
 	if got.SystemName != want {
 		t.Fatalf("SystemName = %q, want %q", got.SystemName, want)
 	}

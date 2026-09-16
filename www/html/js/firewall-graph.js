@@ -121,7 +121,7 @@ function normalizeName(value, fallback) {
 function buildPlatformIPMap(platformRequests) {
   const result = new Map();
   platformRequests.forEach(item => {
-    const systemName = normalizeName(item.system_name, '');
+    const systemName = platformRequestDisplayName(item);
     if (!systemName) return;
     extractIPs(`${item.assigned_ip || ''} ${item.ip_restriction || ''}`).forEach(ip => {
       if (!result.has(ip)) result.set(ip, systemName);
@@ -381,7 +381,7 @@ function buildNodeTooltipHTML(node) {
   let ipContent = '';
 
   if (node.type === 'host') {
-    const platformReq = graph.platformRequests.find(p => normalizeName(p.system_name, '') === node.name);
+    const platformReq = graph.platformRequests.find(p => platformRequestDisplayName(p) === node.name || normalizeName(p.system_name, '') === node.name);
     const platformIP = platformReq?.assigned_ip?.trim();
     const platformIPRestriction = platformReq?.ip_restriction?.trim();
 
@@ -448,6 +448,14 @@ function buildNodeTooltipHTML(node) {
       ${fwText ? `<div><span style="color:#94a3b8;">防火牆編號：</span>${esc(fwText)}</div>` : ''}
     </div>
   `;
+}
+
+function platformRequestDisplayName(item) {
+  const systemName = normalizeName(item?.system_name, '');
+  const environmentType = normalizeName(item?.environment_type, '');
+  if (!systemName) return environmentType;
+  if (!environmentType) return systemName;
+  return `${systemName}（${environmentType}）`;
 }
 
 function hideNodeTooltip() {

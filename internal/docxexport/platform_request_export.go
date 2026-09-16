@@ -85,7 +85,7 @@ func buildPlatformRequestTableXML(req models.SystemPlatformRequest) string {
 		) +
 		tableRowXML(
 			labelCell("應用系統", 1),
-			valueCell("應用系統名稱: "+req.SystemName, 3),
+			valueCell("應用系統名稱: "+platformRequestDisplayName(req), 3),
 			labelCell("英文簡稱", 1),
 			valueCell(req.SystemAlias, 1),
 		) +
@@ -148,6 +148,18 @@ func buildPlatformRequestTableXML(req models.SystemPlatformRequest) string {
 			valueCell(req.Remarks, 5),
 		) +
 		`</w:tbl>`
+}
+
+func platformRequestDisplayName(req models.SystemPlatformRequest) string {
+	systemName := strings.TrimSpace(req.SystemName)
+	environmentType := strings.TrimSpace(req.EnvironmentType)
+	if systemName == "" {
+		return environmentType
+	}
+	if environmentType == "" {
+		return systemName
+	}
+	return systemName + "（" + environmentType + "）"
 }
 
 func buildPlatformRequestNotesXML() string {

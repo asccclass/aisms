@@ -1,6 +1,6 @@
 (function () {
   const modalRootId = 'feature-platform-request-modal-root';
-  const modalPartialPath = '/partials/platform-request-modal.html?v=20260916-assigned-ip';
+  const modalPartialPath = '/partials/platform-request-modal.html?v=20260916-platform-env';
   const exportModalRootId = 'feature-platform-request-export-root';
   const exportModalPartialPath = '/partials/platform-request-export-modal.html';
   const exportStoragePrefix = 'isms_platform_export_reviewers';
@@ -117,7 +117,7 @@
     tbody.innerHTML = list.map(item => `
       <tr>
         <td style="color:var(--text-muted);font-size:12px;">#${item.id}</td>
-        <td>${esc(item.system_name)}<br><span class="hint">${esc(item.system_alias || item.environment_type)}</span></td>
+        <td>${esc(platformRequestDisplayName(item))}<br><span class="hint">${esc(item.system_alias || '—')}</span></td>
         <td>${esc(item.applicant_name)}<br><span class="hint">${esc(item.applicant_department)}</span></td>
         <td>${esc(item.request_type)}<br><span class="hint">${esc(formatDate(item.request_date))}</span></td>
         <td>${esc(item.operating_system)}<br><span class="hint">${esc(item.disk_size)}</span></td>
@@ -125,9 +125,17 @@
         <td>${esc(formatDate(item.request_start_date))}<br><span class="hint">${esc(formatDate(item.request_end_date))}</span></td>
         <td>${esc(item.email)}</td>
         <td>${statusBadge(item.status)}</td>
-        <td><div class="actions"><button class="btn btn-ghost btn-sm" onclick="openPlatformRequestExport(${item.id})">⬇</button><button class="btn btn-ghost btn-sm" onclick="openPlatformRequestEdit(${item.id})">✏️</button><button class="btn btn-danger btn-sm" onclick="confirmDeletePlatformRequest(${item.id}, '${escAttr(item.system_name)}')">🗑️</button></div></td>
+        <td><div class="actions"><button class="btn btn-ghost btn-sm" onclick="openPlatformRequestExport(${item.id})">⬇</button><button class="btn btn-ghost btn-sm" onclick="openPlatformRequestEdit(${item.id})">✏️</button><button class="btn btn-danger btn-sm" onclick="confirmDeletePlatformRequest(${item.id}, '${escAttr(platformRequestDisplayName(item))}')">🗑️</button></div></td>
       </tr>`).join('');
   };
+
+  function platformRequestDisplayName(item) {
+    const systemName = String(item?.system_name || '').trim();
+    const environmentType = String(item?.environment_type || '').trim();
+    if (!systemName) return environmentType;
+    if (!environmentType) return systemName;
+    return `${systemName}（${environmentType}）`;
+  }
 
   window.openPlatformRequestExport = async function openPlatformRequestExport(id) {
     const loaded = await ensurePlatformRequestExportModalLoaded();

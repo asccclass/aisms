@@ -150,8 +150,20 @@ func buildPlatformRequestExportFilenameWithExt(req models.SystemPlatformRequest,
 	if datePart == "" {
 		datePart = datefmt.Today()
 	}
-	systemName := sanitizeFilenamePart(firstNonEmpty(req.SystemName, "system-platform-request"))
+	systemName := sanitizeFilenamePart(firstNonEmpty(platformRequestDisplayName(req), "system-platform-request"))
 	return fmt.Sprintf("ISMS-04-078_系統平台申請表_%s_%s%s", systemName, datePart, ext)
+}
+
+func platformRequestDisplayName(req models.SystemPlatformRequest) string {
+	systemName := strings.TrimSpace(req.SystemName)
+	environmentType := strings.TrimSpace(req.EnvironmentType)
+	if systemName == "" {
+		return environmentType
+	}
+	if environmentType == "" {
+		return systemName
+	}
+	return fmt.Sprintf("%s（%s）", systemName, environmentType)
 }
 
 func sanitizeFilenamePart(value string) string {
@@ -555,7 +567,7 @@ func (h *Handler) withPlatformSystemNames(rows []models.FirewallRequest, creator
 func buildPlatformIPSystemNameMap(rows []models.SystemPlatformRequest) map[string]string {
 	result := make(map[string]string)
 	for _, row := range rows {
-		systemName := strings.TrimSpace(row.SystemName)
+		systemName := platformRequestDisplayName(row)
 		if systemName == "" {
 			continue
 		}
@@ -1358,7 +1370,7 @@ func (h *Handler) loadSystemPlatformRequestDashboardRecords(creator string) ([]m
 		}
 		records = append(records, models.DashboardRecord{
 			ID:            row.ID,
-			PrimaryName:   row.SystemName,
+			PrimaryName:   platformRequestDisplayName(row),
 			SecondaryName: secondary,
 			OwnerName:     row.ApplicantName,
 			Status:        row.Status,
