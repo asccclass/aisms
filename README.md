@@ -169,7 +169,21 @@ Agent 設定範例：
     }
   }
 }
+
+// 使用 TOKEN
+{
+  "mcpServers": {
+    "aisms": {
+      "url": "http://localhost:8080/mcp",
+      "headers": {
+        "Authorization": "Bearer your-secret-token"
+      }
+    }
+  }
+}
 ```
+
+若 Agent 使用 ais-mcp.exe 或 go run ./cmd/mcpstdio 的 stdio 模式，則不經過 /mcp HTTP endpoint，因此不需要設定 MCP_API_TOKEN。Token 僅保護 HTTP MCP 連線。
 
 若不預先 build，也可以用 Go 直接啟動：
 
