@@ -22,3 +22,6 @@ docker-build:
 # 初始化資料目錄
 init:
 	mkdir -p data logs www/html
+
+s:
+	git push -u origin main
