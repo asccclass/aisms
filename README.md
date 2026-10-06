@@ -22,7 +22,8 @@
 ```
 isms-privilege/
 ├── cmd/
-│   └── main.go              # 主程式（sherryserver 入口）
+│   ├── main.go              # 主程式（sherryserver / HTTP 入口）
+│   └── mcpstdio/            # MCP stdio command line 入口
 ├── internal/
 │   ├── models/
 │   │   └── account.go       # 資料模型
@@ -30,6 +31,8 @@ isms-privilege/
 │   │   └── db.go            # SQLite CRUD 層
 │   ├── mailer/
 │   │   └── mailer.go        # SMTP Email 服務
+│   ├── mcp/
+│   │   └── server.go        # MCP HTTP / stdio server
 │   └── handlers/
 │       └── handlers.go      # HTTP API 路由
 ├── www/html/
@@ -92,6 +95,86 @@ www/html/
 | GET    | `/api/stats` | 統計數字 |
 | GET    | `/api/notification-logs` | 通知記錄 |
 | GET    | `/confirm?token=&action=` | 使用者確認頁（繼續 / 停用）|
+| POST   | `/mcp` | MCP Streamable HTTP / JSON-RPC endpoint |
+
+### MCP 功能
+
+本服務提供 Model Context Protocol (MCP) 介面，讓 Agent 可透過 MCP 讀取 ISMS 資料。MCP tools 目前採唯讀設計，避免外部 Agent 直接修改資料。
+
+目前提供的 tools：
+
+| Tool | 說明 |
+|------|------|
+| `list_dashboard_forms` | 列出首頁儀表板已設定的表單 |
+| `list_firewall_requests` | 列出 04-042 防火牆申請，可用 `creator` 篩選建立者 |
+| `get_firewall_request` | 依 `id` 取得單筆 04-042 防火牆申請，可用 `creator` 限制建立者 |
+
+#### HTTP MCP endpoint
+
+啟動主服務後，MCP HTTP endpoint 會掛在：
+
+```http
+POST /mcp
+```
+
+若 `envfile` 設定 `MCP_API_TOKEN`，MCP client 需帶 Bearer token：
+
+```http
+Authorization: Bearer your-secret-token
+```
+
+範例：
+
+```powershell
+Invoke-RestMethod `
+  -Method Post `
+  -Uri http://localhost:8080/mcp `
+  -ContentType "application/json" `
+  -Body '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+```
+
+#### Command line / stdio MCP
+
+Agent 若支援 command line stdio MCP，可直接啟動：
+
+```powershell
+go run ./cmd/mcpstdio
+```
+
+建議先 build 成執行檔：
+
+```powershell
+go build -o ais-mcp.exe ./cmd/mcpstdio
+```
+
+Agent 設定範例：
+
+```json
+{
+  "mcpServers": {
+    "aisms": {
+      "command": "D:\\myprograms\\aisms\\ais-mcp.exe",
+      "cwd": "D:\\myprograms\\aisms"
+    }
+  }
+}
+```
+
+若不預先 build，也可以用 Go 直接啟動：
+
+```json
+{
+  "mcpServers": {
+    "aisms": {
+      "command": "go",
+      "args": ["run", "./cmd/mcpstdio"],
+      "cwd": "D:\\myprograms\\aisms"
+    }
+  }
+}
+```
+
+`cmd/mcpstdio` 會讀取 `envfile` 與 `DB_PATH`，使用同一份 SQLite 資料庫。stdio 模式由 Agent 管理程序生命週期，不需要另外啟動 HTTP server。
 
 #### `platform-requests` 欄位用途
 
@@ -218,6 +301,10 @@ DOCX_GROUP_LEADER=
 
 # 04-078 PDF 匯出字型
 # 請保留 assets/fonts/NotoSansTC-VF.ttf，確保繁中 PDF 正常顯示
+
+# MCP HTTP endpoint 保護用 token（可選）
+# 若留空，/mcp 不檢查 Bearer token
+MCP_API_TOKEN=
 
 # Google 登入限制與單位推估
 GOOGLE_ALLOWED_DOMAINS=example.org,sinica.edu.tw
