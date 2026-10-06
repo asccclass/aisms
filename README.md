@@ -132,6 +132,8 @@ POST /mcp
 Authorization: Bearer your-secret-token
 ```
 
+API KEY 可以使用：python3 -c "import secrets; print(secrets.token_hex(32))"  產生。
+
 範例：
 
 ```powershell
