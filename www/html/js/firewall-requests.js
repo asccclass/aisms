@@ -13,6 +13,12 @@
   window.firewallRequestEditingId = null;
   window.firewallRequestDeleteId = null;
 
+  function firewallRequestStatusBadge(s) {
+    const map = { active:'badge-active', closed:'badge-closed', pending:'badge-pending', expired:'badge-expired' };
+    const label = { active:'使用中', closed:'已完成', pending:'待追蹤', expired:'已過期' };
+    return `<span class="badge ${map[s]||'badge-default'}">${esc(label[s]||s)}</span>`;
+  }
+
   async function ensureFirewallRequestModalLoaded() {
     const root = document.getElementById(modalRootId);
     if (!root) return false;
@@ -57,7 +63,7 @@
         <td>${esc(item.protocol_type)}</td>
         <td>${esc(formatDate(item.start_date))}<br><span class="hint">${esc(formatDate(item.end_date))}</span></td>
         <td>${esc(item.rule_description)}</td>
-        <td>${statusBadge(item.status)}</td>
+        <td>${firewallRequestStatusBadge(item.status)}</td>
         <td><div class="actions"><button class="btn btn-ghost btn-sm" onclick="openFirewallRequestEdit(${item.id})">✏️</button><button class="btn btn-danger btn-sm" onclick="confirmDeleteFirewallRequest(${item.id}, '${escAttr(item.system_name)}')">🗑️</button></div></td>
       </tr>`).join('');
   };
