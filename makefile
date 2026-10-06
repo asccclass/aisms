@@ -1,6 +1,6 @@
 GOOS := $(shell go env GOOS)
 EXE_EXT := $(if $(filter windows,$(GOOS)),.exe,)
-SERVER_BIN := isms-server-$(GOOS)$(EXE_EXT)
+SERVER_BIN := isms-server$(EXE_EXT)
 
 .PHONY: run build tidy clean
 
