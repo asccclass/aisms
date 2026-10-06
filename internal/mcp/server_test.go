@@ -74,6 +74,25 @@ func TestMCPRequiresBearerTokenWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestMCPServeStdioHandlesJSONRPCLines(t *testing.T) {
+	server := newTestServer(t)
+	input := bytes.NewBufferString(`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}` + "\n")
+	var output bytes.Buffer
+
+	if err := server.ServeStdio(input, &output); err != nil {
+		t.Fatalf("ServeStdio failed: %v", err)
+	}
+
+	var body map[string]interface{}
+	if err := json.Unmarshal(output.Bytes(), &body); err != nil {
+		t.Fatalf("json.Unmarshal failed: %v; output=%s", err, output.String())
+	}
+	tools := body["result"].(map[string]interface{})["tools"].([]interface{})
+	if len(tools) != 3 {
+		t.Fatalf("stdio tools/list returned %d tools, want 3", len(tools))
+	}
+}
+
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
 	database, err := db.New(filepath.Join(t.TempDir(), "isms.db"))

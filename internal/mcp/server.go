@@ -1,9 +1,11 @@
 package mcp
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"isms-privilege/internal/db"
 	"net/http"
 	"os"
@@ -78,23 +80,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := s.handle(req)
-	if req.ID == nil {
+	resp := s.HandleRPC(req)
+	if resp == nil {
 		w.WriteHeader(http.StatusAccepted)
-		return
-	}
-	if err != nil {
-		var rpcErr *rpcError
-		if errors.As(err, &rpcErr) {
-			writeRPCError(w, req.ID, http.StatusOK, rpcErr.Code, rpcErr.Message)
-			return
-		}
-		writeRPCError(w, req.ID, http.StatusOK, -32603, err.Error())
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_ = json.NewEncoder(w).Encode(rpcResponse{JSONRPC: "2.0", ID: req.ID, Result: result})
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 func (s *Server) authorized(r *http.Request) bool {
@@ -104,6 +97,64 @@ func (s *Server) authorized(r *http.Request) bool {
 	}
 	auth := strings.TrimSpace(r.Header.Get("Authorization"))
 	return auth == "Bearer "+token
+}
+
+func (s *Server) HandleRPC(req rpcRequest) *rpcResponse {
+	result, err := s.handle(req)
+	if req.ID == nil {
+		return nil
+	}
+	if err != nil {
+		var rpcErr *rpcError
+		if errors.As(err, &rpcErr) {
+			return &rpcResponse{JSONRPC: "2.0", ID: req.ID, Error: rpcErr}
+		}
+		return &rpcResponse{JSONRPC: "2.0", ID: req.ID, Error: &rpcError{Code: -32603, Message: err.Error()}}
+	}
+	return &rpcResponse{JSONRPC: "2.0", ID: req.ID, Result: result}
+}
+
+func (s *Server) ServeStdio(in io.Reader, out io.Writer) error {
+	scanner := bufio.NewScanner(in)
+	writer := bufio.NewWriter(out)
+	defer writer.Flush()
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+
+		var req rpcRequest
+		if err := json.Unmarshal([]byte(line), &req); err != nil {
+			if err := writeStdioResponse(writer, rpcResponse{JSONRPC: "2.0", Error: &rpcError{Code: -32700, Message: "parse error"}}); err != nil {
+				return err
+			}
+			continue
+		}
+		if req.JSONRPC != "2.0" {
+			if req.ID != nil {
+				if err := writeStdioResponse(writer, rpcResponse{JSONRPC: "2.0", ID: req.ID, Error: &rpcError{Code: -32600, Message: "invalid request"}}); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+
+		if resp := s.HandleRPC(req); resp != nil {
+			if err := writeStdioResponse(writer, *resp); err != nil {
+				return err
+			}
+		}
+	}
+	return scanner.Err()
+}
+
+func writeStdioResponse(writer *bufio.Writer, resp rpcResponse) error {
+	if err := json.NewEncoder(writer).Encode(resp); err != nil {
+		return err
+	}
+	return writer.Flush()
 }
 
 func (s *Server) handle(req rpcRequest) (interface{}, error) {
