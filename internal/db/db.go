@@ -1195,11 +1195,28 @@ func (d *DB) ListFirewallRequests() ([]models.FirewallRequest, error) {
 }
 
 func (d *DB) ListFirewallRequestsByCreator(creator string) ([]models.FirewallRequest, error) {
+	return d.ListFirewallRequestsFiltered("", "all", creator)
+}
+
+func (d *DB) ListFirewallRequestsFiltered(keyword, status, creator string) ([]models.FirewallRequest, error) {
 	query := `SELECT id,legacy_form_number,system_name,action,purpose_type,source_zone,source_zone2,source_ip,destination_zone,destination_zone2,destination_ip,protocol_type,start_date,end_date,request_date,rule_description,firewall_zone,firewall_id,status,creator,remarks,created_at,updated_at FROM firewall_requests`
 	args := []interface{}{}
+	clauses := []string{}
+	if strings.TrimSpace(keyword) != "" {
+		like := "%" + strings.TrimSpace(keyword) + "%"
+		clauses = append(clauses, "(legacy_form_number LIKE ? OR system_name LIKE ? OR source_ip LIKE ? OR destination_ip LIKE ? OR protocol_type LIKE ? OR rule_description LIKE ? OR firewall_zone LIKE ? OR firewall_id LIKE ?)")
+		args = append(args, like, like, like, like, like, like, like, like)
+	}
+	if strings.TrimSpace(status) != "" && status != "all" {
+		clauses = append(clauses, "status = ?")
+		args = append(args, status)
+	}
 	if strings.TrimSpace(creator) != "" {
-		query += ` WHERE creator=?`
+		clauses = append(clauses, "creator = ?")
 		args = append(args, creator)
+	}
+	if len(clauses) > 0 {
+		query += ` WHERE ` + strings.Join(clauses, " AND ")
 	}
 	query += ` ORDER BY id DESC`
 	rows, err := d.conn.Query(query, args...)

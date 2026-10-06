@@ -196,8 +196,10 @@ func (s *Server) tools() []tool {
 		{
 			Name:        "list_firewall_requests",
 			Title:       "List Firewall Requests",
-			Description: "列出 04-042 防火牆申請，可用 creator 篩選建立者。",
+			Description: "列出 04-042 防火牆申請，可用 keyword、status、creator 篩選。",
 			InputSchema: objectSchema(map[string]interface{}{
+				"keyword": map[string]interface{}{"type": "string", "description": "關鍵字，搜尋表單號、系統名稱、來源/目的 IP、通訊協定、規則說明、防火牆區域或規則編號。"},
+				"status":  map[string]interface{}{"type": "string", "description": "狀態，例如 active、pending、closed；可留空或 all。"},
 				"creator": map[string]interface{}{"type": "string", "description": "建立者 email，可留空列出全部。"},
 			}, nil),
 		},
@@ -290,7 +292,11 @@ func (s *Server) callTool(params callToolParams) (interface{}, error) {
 		}
 		return toolJSONContent(forms)
 	case "list_firewall_requests":
-		rows, err := s.DB.ListFirewallRequestsByCreator(stringArg(params.Arguments, "creator"))
+		rows, err := s.DB.ListFirewallRequestsFiltered(
+			stringArg(params.Arguments, "keyword"),
+			stringArg(params.Arguments, "status"),
+			stringArg(params.Arguments, "creator"),
+		)
 		if err != nil {
 			return nil, err
 		}

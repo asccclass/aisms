@@ -58,6 +58,48 @@ func TestMCPCallListFirewallRequests(t *testing.T) {
 	}
 }
 
+func TestMCPCallListFirewallRequestsFiltersKeywordAndStatus(t *testing.T) {
+	server := newTestServer(t)
+	if _, err := server.DB.CreateFirewallRequest(&models.FirewallRequest{
+		LegacyFormNumber: "FW-MCP-DESKTOP",
+		SystemName:       "辦公室桌機（正式環境）-- MCP 測試服務",
+		Action:           "開通",
+		SourceIP:         "10.10.10.10/32",
+		DestinationIP:    "10.20.20.20/32",
+		ProtocolType:     "TCP 443",
+		RuleDescription:  "桌機連線至 MCP 測試服務",
+		Status:           "active",
+		Creator:          "owner@example.com",
+	}); err != nil {
+		t.Fatalf("CreateFirewallRequest desktop failed: %v", err)
+	}
+	if _, err := server.DB.CreateFirewallRequest(&models.FirewallRequest{
+		LegacyFormNumber: "FW-MCP-OTHER",
+		SystemName:       "其他服務",
+		Action:           "開通",
+		SourceIP:         "10.30.30.30/32",
+		DestinationIP:    "10.40.40.40/32",
+		ProtocolType:     "TCP 22",
+		RuleDescription:  "其他連線",
+		Status:           "closed",
+		Creator:          "owner@example.com",
+	}); err != nil {
+		t.Fatalf("CreateFirewallRequest other failed: %v", err)
+	}
+
+	resp := postRPC(t, server, `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_firewall_requests","arguments":{"keyword":"桌機","status":"active","creator":"owner@example.com"}}}`)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("tools/call status = %d, want %d", resp.Code, http.StatusOK)
+	}
+	text := toolText(t, resp)
+	if !bytes.Contains([]byte(text), []byte("FW-MCP-DESKTOP")) {
+		t.Fatalf("tool response should contain desktop record; text=%s", text)
+	}
+	if bytes.Contains([]byte(text), []byte("FW-MCP-OTHER")) {
+		t.Fatalf("tool response should not contain nonmatching record; text=%s", text)
+	}
+}
+
 func TestMCPRequiresBearerTokenWhenConfigured(t *testing.T) {
 	t.Setenv("MCP_API_TOKEN", "secret")
 	server := newTestServer(t)
