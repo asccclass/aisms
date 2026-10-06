@@ -111,6 +111,12 @@ www/html/
 | `list_dashboard_forms` | 列出首頁儀表板已設定的表單 |
 | `list_firewall_requests` | 列出 04-042 防火牆申請，可用 `creator` 篩選建立者 |
 | `get_firewall_request` | 依 `id` 取得單筆 04-042 防火牆申請，可用 `creator` 限制建立者 |
+| `list_asset_inventory_records` | 列出 04-008 資訊資產清冊，可用 `keyword`、`status`、`asset_type`、`creator` 篩選 |
+| `get_asset_inventory_record` | 依 `id` 取得單筆 04-008 資訊資產清冊，可用 `creator` 限制建立者 |
+| `list_application_change_requests` | 列出 04-052 功能需求更新建議，可用 `creator` 篩選建立者 |
+| `get_application_change_request` | 依 `id` 取得單筆 04-052 功能需求更新建議，可用 `creator` 限制建立者 |
+| `list_system_platform_requests` | 列出 04-078 系統平台申請，可用 `creator` 篩選建立者 |
+| `get_system_platform_request` | 依 `id` 取得單筆 04-078 系統平台申請，可用 `creator` 限制建立者 |
 
 #### HTTP MCP endpoint
 
