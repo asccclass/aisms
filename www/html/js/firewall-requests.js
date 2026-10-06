@@ -56,7 +56,7 @@
         <td>${esc(item.destination_zone)}${item.destination_zone2 ? ' / ' + esc(item.destination_zone2) : ''}<br><span class="hint mono">${esc(item.destination_ip)}</span></td>
         <td>${esc(item.protocol_type)}</td>
         <td>${esc(formatDate(item.start_date))}<br><span class="hint">${esc(formatDate(item.end_date))}</span></td>
-        <td>${esc(item.firewall_zone)}<br><span class="hint mono">${esc(item.firewall_id)}</span></td>
+        <td>${esc(item.rule_description)}</td>
         <td>${statusBadge(item.status)}</td>
         <td><div class="actions"><button class="btn btn-ghost btn-sm" onclick="openFirewallRequestEdit(${item.id})">✏️</button><button class="btn btn-danger btn-sm" onclick="confirmDeleteFirewallRequest(${item.id}, '${escAttr(item.system_name)}')">🗑️</button></div></td>
       </tr>`).join('');

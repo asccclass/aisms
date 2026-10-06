@@ -30,3 +30,19 @@ func TestFirewallRequestsHeaderUsesRuleDescription(t *testing.T) {
 		})
 	}
 }
+
+func TestFirewallRequestsListRendersRuleDescription(t *testing.T) {
+	file := filepath.Join("..", "..", "www", "html", "js", "firewall-requests.js")
+	body, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) failed: %v", file, err)
+	}
+
+	content := string(body)
+	if !strings.Contains(content, "<td>${esc(item.rule_description)}</td>") {
+		t.Fatalf("firewall request list row does not render rule_description")
+	}
+	if strings.Contains(content, "<td>${esc(item.firewall_zone)}<br><span class=\"hint mono\">${esc(item.firewall_id)}</span></td>") {
+		t.Fatalf("firewall request list row still renders firewall zone and ID in the rule description column")
+	}
+}
