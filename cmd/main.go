@@ -9,6 +9,7 @@ import (
 	"isms-privilege/internal/db"
 	"isms-privilege/internal/handlers"
 	"isms-privilege/internal/mailer"
+	"isms-privilege/internal/mcp"
 	"isms-privilege/internal/web"
 	"log"
 	"net/http"
@@ -45,6 +46,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
+	mux.Handle("/mcp", mcp.NewServer(database))
 
 	docRoot := os.Getenv("DocumentRoot")
 	if docRoot == "" {
