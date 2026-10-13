@@ -39,12 +39,16 @@
       const system = document.getElementById('ai-system_name');
       const ip = document.getElementById('ai-ip_address');
       const ipMap = {};
+      const environmentMap = {};
       platforms.forEach(item => {
         const values = String(item.assigned_ip || '').split(/[,\s]+/).filter(Boolean);
-        if (item.system_name) ipMap[item.system_name] = [...new Set([...(ipMap[item.system_name] || []), ...values])];
+        if (item.system_name) {
+          ipMap[item.system_name] = [...new Set([...(ipMap[item.system_name] || []), ...values])];
+          environmentMap[item.system_name] = [...new Set([...(environmentMap[item.system_name] || []), item.environment_type || item.environment || ''])].filter(Boolean);
+        }
       });
       const systemNames = Object.keys(ipMap).sort();
-      system.outerHTML = '<select id="ai-system_name" class="form-control"><option value="">請選擇系統名稱</option>' + systemNames.map(value => `<option value="${escAttr(value)}">${esc(value)}</option>`).join('') + '</select>';
+      system.outerHTML = '<select id="ai-system_name" class="form-control"><option value="">請選擇系統名稱</option>' + systemNames.map(value => `<option value="${escAttr(value)}">${esc(value)}（${esc(environmentMap[value].join('、'))}）</option>`).join('') + '</select>';
       ip.outerHTML = '<select id="ai-ip_address" class="form-control"><option value="">請先選擇系統名稱</option></select>';
       const systemSelect = document.getElementById('ai-system_name');
       const ipSelect = document.getElementById('ai-ip_address');
