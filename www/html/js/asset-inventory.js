@@ -88,9 +88,9 @@
         <td style="color:var(--text-muted);font-size:12px;">#${item.id}</td>
         <td>${esc(item.system_name)}<br><span class="hint">${esc(item.asset_code || '—')}</span></td>
         <td>${esc(item.environment || '—')}</td>
-        <td>${esc(item.asset_type)}<br><span class="hint">${esc(item.asset_name)}</span></td>
+        <td>${esc(item.asset_name)}<br><span class="hint">${esc(item.ip_address || '—')}</span></td>
         <td>${esc(item.manager_department)}<br><span class="hint">${esc(item.user_department)}</span></td>
-        <td>${esc(item.location)}</td>
+        <td>${esc(item.asset_type)}</td>
         <td>${esc(item.confidentiality || '—')} / ${esc(item.integrity || '—')} / ${esc(item.availability || '—')}</td>
         <td>${esc(item.asset_value || '—')} / ${esc(item.protection_level || '—')}</td>
         <td>${esc(item.quantity)}</td>
