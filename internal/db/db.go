@@ -301,6 +301,7 @@ func (d *DB) migrate() error {
 	_, _ = d.conn.Exec(`ALTER TABLE application_change_requests ADD COLUMN scan_file_url TEXT NOT NULL DEFAULT ''`)
 	_, _ = d.conn.Exec(`ALTER TABLE system_platform_requests ADD COLUMN assigned_ip TEXT NOT NULL DEFAULT ''`)
 	if err == nil {
+		_, _ = d.conn.Exec(`ALTER TABLE asset_inventory_records ADD COLUMN ip_address TEXT NOT NULL DEFAULT ''`)
 		if _, e := d.conn.Exec(`CREATE TABLE IF NOT EXISTS vulnerability_remediation_records (id INTEGER PRIMARY KEY AUTOINCREMENT, system_name TEXT NOT NULL DEFAULT '', form_date TEXT NOT NULL DEFAULT '', scan_ip TEXT NOT NULL DEFAULT '', scan_date TEXT NOT NULL DEFAULT '', report_date TEXT NOT NULL DEFAULT '', weakness_total INTEGER NOT NULL DEFAULT 0, fixed_total INTEGER NOT NULL DEFAULT 0, unfixed_total INTEGER NOT NULL DEFAULT 0, handler_signature TEXT NOT NULL DEFAULT '', supervisor_signature TEXT NOT NULL DEFAULT '', service_result TEXT NOT NULL DEFAULT '', service_reason TEXT NOT NULL DEFAULT '', service_staff TEXT NOT NULL DEFAULT '', service_team_lead TEXT NOT NULL DEFAULT '', security_chief TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'active', creator TEXT NOT NULL DEFAULT '', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP); CREATE TABLE IF NOT EXISTS vulnerability_remediation_items (id INTEGER PRIMARY KEY AUTOINCREMENT, record_id INTEGER NOT NULL REFERENCES vulnerability_remediation_records(id) ON DELETE CASCADE, sequence INTEGER NOT NULL, weakness_name TEXT NOT NULL DEFAULT '', risk_level TEXT NOT NULL DEFAULT '', remediation TEXT NOT NULL DEFAULT '', remediated_date TEXT NOT NULL DEFAULT '', unfixable_reason TEXT NOT NULL DEFAULT '', handler_signature TEXT NOT NULL DEFAULT '')`); e != nil {
 			return e
 		}
@@ -1304,7 +1305,7 @@ func (d *DB) ListAssetInventoryRecordsFiltered(keyword, status, assetType string
 }
 
 func (d *DB) ListAssetInventoryRecordsByCreator(keyword, status, assetType, creator string) ([]models.AssetInventoryRecord, error) {
-	base := `SELECT id,system_name,environment,asset_code,asset_type,asset_name,vendor_name,is_core_asset,has_national_security_concern,asset_description,quantity,os_config_baseline,browser_config_baseline,network_config_baseline,application_config_baseline,other_config_baseline,config_exception_code,manager_department,user_department,location,confidentiality,integrity,availability,asset_value,legal_compliance,protection_level,mtpd,rto,rpo,status,creator,remarks,created_at,updated_at FROM asset_inventory_records`
+	base := `SELECT id,system_name,ip_address,environment,asset_code,asset_type,asset_name,vendor_name,is_core_asset,has_national_security_concern,asset_description,quantity,os_config_baseline,browser_config_baseline,network_config_baseline,application_config_baseline,other_config_baseline,config_exception_code,manager_department,user_department,location,confidentiality,integrity,availability,asset_value,legal_compliance,protection_level,mtpd,rto,rpo,status,creator,remarks,created_at,updated_at FROM asset_inventory_records`
 	clauses := []string{}
 	args := []interface{}{}
 	if strings.TrimSpace(status) != "" && status != "all" {
@@ -1337,7 +1338,7 @@ func (d *DB) ListAssetInventoryRecordsByCreator(keyword, status, assetType, crea
 	var list []models.AssetInventoryRecord
 	for rows.Next() {
 		var r models.AssetInventoryRecord
-		if err := rows.Scan(&r.ID, &r.SystemName, &r.Environment, &r.AssetCode, &r.AssetType, &r.AssetName, &r.VendorName, &r.IsCoreAsset, &r.HasNationalSecurityConcern, &r.AssetDescription, &r.Quantity, &r.OsConfigBaseline, &r.BrowserConfigBaseline, &r.NetworkConfigBaseline, &r.ApplicationConfigBaseline, &r.OtherConfigBaseline, &r.ConfigExceptionCode, &r.ManagerDepartment, &r.UserDepartment, &r.Location, &r.Confidentiality, &r.Integrity, &r.Availability, &r.AssetValue, &r.LegalCompliance, &r.ProtectionLevel, &r.Mtpd, &r.Rto, &r.Rpo, &r.Status, &r.Creator, &r.Remarks, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.SystemName, &r.IPAddress, &r.Environment, &r.AssetCode, &r.AssetType, &r.AssetName, &r.VendorName, &r.IsCoreAsset, &r.HasNationalSecurityConcern, &r.AssetDescription, &r.Quantity, &r.OsConfigBaseline, &r.BrowserConfigBaseline, &r.NetworkConfigBaseline, &r.ApplicationConfigBaseline, &r.OtherConfigBaseline, &r.ConfigExceptionCode, &r.ManagerDepartment, &r.UserDepartment, &r.Location, &r.Confidentiality, &r.Integrity, &r.Availability, &r.AssetValue, &r.LegalCompliance, &r.ProtectionLevel, &r.Mtpd, &r.Rto, &r.Rpo, &r.Status, &r.Creator, &r.Remarks, &r.CreatedAt, &r.UpdatedAt); err != nil {
 			return nil, err
 		}
 		list = append(list, r)
@@ -1353,7 +1354,7 @@ func (d *DB) GetAssetInventoryRecord(id int) (*models.AssetInventoryRecord, erro
 }
 
 func (d *DB) GetAssetInventoryRecordByCreator(id int, creator string) (*models.AssetInventoryRecord, error) {
-	query := `SELECT id,system_name,environment,asset_code,asset_type,asset_name,vendor_name,is_core_asset,has_national_security_concern,asset_description,quantity,os_config_baseline,browser_config_baseline,network_config_baseline,application_config_baseline,other_config_baseline,config_exception_code,manager_department,user_department,location,confidentiality,integrity,availability,asset_value,legal_compliance,protection_level,mtpd,rto,rpo,status,creator,remarks,created_at,updated_at FROM asset_inventory_records WHERE id=?`
+	query := `SELECT id,system_name,ip_address,environment,asset_code,asset_type,asset_name,vendor_name,is_core_asset,has_national_security_concern,asset_description,quantity,os_config_baseline,browser_config_baseline,network_config_baseline,application_config_baseline,other_config_baseline,config_exception_code,manager_department,user_department,location,confidentiality,integrity,availability,asset_value,legal_compliance,protection_level,mtpd,rto,rpo,status,creator,remarks,created_at,updated_at FROM asset_inventory_records WHERE id=?`
 	args := []interface{}{id}
 	if strings.TrimSpace(creator) != "" {
 		query += ` AND creator=?`
@@ -1361,15 +1362,15 @@ func (d *DB) GetAssetInventoryRecordByCreator(id int, creator string) (*models.A
 	}
 	row := d.conn.QueryRow(query, args...)
 	var r models.AssetInventoryRecord
-	if err := row.Scan(&r.ID, &r.SystemName, &r.Environment, &r.AssetCode, &r.AssetType, &r.AssetName, &r.VendorName, &r.IsCoreAsset, &r.HasNationalSecurityConcern, &r.AssetDescription, &r.Quantity, &r.OsConfigBaseline, &r.BrowserConfigBaseline, &r.NetworkConfigBaseline, &r.ApplicationConfigBaseline, &r.OtherConfigBaseline, &r.ConfigExceptionCode, &r.ManagerDepartment, &r.UserDepartment, &r.Location, &r.Confidentiality, &r.Integrity, &r.Availability, &r.AssetValue, &r.LegalCompliance, &r.ProtectionLevel, &r.Mtpd, &r.Rto, &r.Rpo, &r.Status, &r.Creator, &r.Remarks, &r.CreatedAt, &r.UpdatedAt); err != nil {
+	if err := row.Scan(&r.ID, &r.SystemName, &r.IPAddress, &r.Environment, &r.AssetCode, &r.AssetType, &r.AssetName, &r.VendorName, &r.IsCoreAsset, &r.HasNationalSecurityConcern, &r.AssetDescription, &r.Quantity, &r.OsConfigBaseline, &r.BrowserConfigBaseline, &r.NetworkConfigBaseline, &r.ApplicationConfigBaseline, &r.OtherConfigBaseline, &r.ConfigExceptionCode, &r.ManagerDepartment, &r.UserDepartment, &r.Location, &r.Confidentiality, &r.Integrity, &r.Availability, &r.AssetValue, &r.LegalCompliance, &r.ProtectionLevel, &r.Mtpd, &r.Rto, &r.Rpo, &r.Status, &r.Creator, &r.Remarks, &r.CreatedAt, &r.UpdatedAt); err != nil {
 		return nil, err
 	}
 	return &r, nil
 }
 
 func (d *DB) CreateAssetInventoryRecord(r *models.AssetInventoryRecord) (int64, error) {
-	res, err := d.conn.Exec(`INSERT INTO asset_inventory_records (system_name,environment,asset_code,asset_type,asset_name,vendor_name,is_core_asset,has_national_security_concern,asset_description,quantity,os_config_baseline,browser_config_baseline,network_config_baseline,application_config_baseline,other_config_baseline,config_exception_code,manager_department,user_department,location,confidentiality,integrity,availability,asset_value,legal_compliance,protection_level,mtpd,rto,rpo,status,creator,remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		r.SystemName, r.Environment, r.AssetCode, r.AssetType, r.AssetName, r.VendorName, r.IsCoreAsset, r.HasNationalSecurityConcern, r.AssetDescription, r.Quantity, r.OsConfigBaseline, r.BrowserConfigBaseline, r.NetworkConfigBaseline, r.ApplicationConfigBaseline, r.OtherConfigBaseline, r.ConfigExceptionCode, r.ManagerDepartment, r.UserDepartment, r.Location, r.Confidentiality, r.Integrity, r.Availability, r.AssetValue, r.LegalCompliance, r.ProtectionLevel, r.Mtpd, r.Rto, r.Rpo, r.Status, r.Creator, r.Remarks)
+	res, err := d.conn.Exec(`INSERT INTO asset_inventory_records (system_name,ip_address,environment,asset_code,asset_type,asset_name,vendor_name,is_core_asset,has_national_security_concern,asset_description,quantity,os_config_baseline,browser_config_baseline,network_config_baseline,application_config_baseline,other_config_baseline,config_exception_code,manager_department,user_department,location,confidentiality,integrity,availability,asset_value,legal_compliance,protection_level,mtpd,rto,rpo,status,creator,remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		r.SystemName, r.IPAddress, r.Environment, r.AssetCode, r.AssetType, r.AssetName, r.VendorName, r.IsCoreAsset, r.HasNationalSecurityConcern, r.AssetDescription, r.Quantity, r.OsConfigBaseline, r.BrowserConfigBaseline, r.NetworkConfigBaseline, r.ApplicationConfigBaseline, r.OtherConfigBaseline, r.ConfigExceptionCode, r.ManagerDepartment, r.UserDepartment, r.Location, r.Confidentiality, r.Integrity, r.Availability, r.AssetValue, r.LegalCompliance, r.ProtectionLevel, r.Mtpd, r.Rto, r.Rpo, r.Status, r.Creator, r.Remarks)
 	if err != nil {
 		return 0, err
 	}
@@ -1377,8 +1378,8 @@ func (d *DB) CreateAssetInventoryRecord(r *models.AssetInventoryRecord) (int64, 
 }
 
 func (d *DB) UpdateAssetInventoryRecord(r *models.AssetInventoryRecord) error {
-	_, err := d.conn.Exec(`UPDATE asset_inventory_records SET system_name=?,environment=?,asset_code=?,asset_type=?,asset_name=?,vendor_name=?,is_core_asset=?,has_national_security_concern=?,asset_description=?,quantity=?,os_config_baseline=?,browser_config_baseline=?,network_config_baseline=?,application_config_baseline=?,other_config_baseline=?,config_exception_code=?,manager_department=?,user_department=?,location=?,confidentiality=?,integrity=?,availability=?,asset_value=?,legal_compliance=?,protection_level=?,mtpd=?,rto=?,rpo=?,status=?,creator=?,remarks=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`,
-		r.SystemName, r.Environment, r.AssetCode, r.AssetType, r.AssetName, r.VendorName, r.IsCoreAsset, r.HasNationalSecurityConcern, r.AssetDescription, r.Quantity, r.OsConfigBaseline, r.BrowserConfigBaseline, r.NetworkConfigBaseline, r.ApplicationConfigBaseline, r.OtherConfigBaseline, r.ConfigExceptionCode, r.ManagerDepartment, r.UserDepartment, r.Location, r.Confidentiality, r.Integrity, r.Availability, r.AssetValue, r.LegalCompliance, r.ProtectionLevel, r.Mtpd, r.Rto, r.Rpo, r.Status, r.Creator, r.Remarks, r.ID)
+	_, err := d.conn.Exec(`UPDATE asset_inventory_records SET system_name=?,ip_address=?,environment=?,asset_code=?,asset_type=?,asset_name=?,vendor_name=?,is_core_asset=?,has_national_security_concern=?,asset_description=?,quantity=?,os_config_baseline=?,browser_config_baseline=?,network_config_baseline=?,application_config_baseline=?,other_config_baseline=?,config_exception_code=?,manager_department=?,user_department=?,location=?,confidentiality=?,integrity=?,availability=?,asset_value=?,legal_compliance=?,protection_level=?,mtpd=?,rto=?,rpo=?,status=?,creator=?,remarks=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+		r.SystemName, r.IPAddress, r.Environment, r.AssetCode, r.AssetType, r.AssetName, r.VendorName, r.IsCoreAsset, r.HasNationalSecurityConcern, r.AssetDescription, r.Quantity, r.OsConfigBaseline, r.BrowserConfigBaseline, r.NetworkConfigBaseline, r.ApplicationConfigBaseline, r.OtherConfigBaseline, r.ConfigExceptionCode, r.ManagerDepartment, r.UserDepartment, r.Location, r.Confidentiality, r.Integrity, r.Availability, r.AssetValue, r.LegalCompliance, r.ProtectionLevel, r.Mtpd, r.Rto, r.Rpo, r.Status, r.Creator, r.Remarks, r.ID)
 	return err
 }
 
