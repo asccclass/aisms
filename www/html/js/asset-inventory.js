@@ -148,7 +148,6 @@
     window.refreshAssetInventoryIPs?.();
     const ip = document.getElementById('ai-ip_address');
     if (ip) ip.value = item.ip_address || '';
-    const ip = document.getElementById('ai-ip_address');
     if (ip && item.ip_address && ![...ip.options].some(option => option.value === item.ip_address)) {
       ip.add(new Option(item.ip_address, item.ip_address));
     }
