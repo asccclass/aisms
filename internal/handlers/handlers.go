@@ -241,10 +241,10 @@ func (h *Handler) CreateAssetInventoryRecord(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	req.Creator = GetUserEmail(r)
-	if strings.TrimSpace(req.IPAddress) != "" {
-		valid, e := h.DB.IsPlatformConfiguredIP(req.SystemName, req.IPAddress)
+	if strings.TrimSpace(req.IPAddress) != "" && strings.TrimSpace(req.Environment) != "" {
+		valid, e := h.DB.IsPlatformConfiguration(req.SystemName, req.IPAddress, req.Environment)
 		if e != nil || !valid {
-			writeJSON(w, 400, map[string]string{"error": "IP 位址必須來自 04-078 系統平台申請的配置 IP"})
+			writeJSON(w, 400, map[string]string{"error": "系統、IP 與環境必須來自同一筆 04-078 系統平台申請"})
 			return
 		}
 	}
@@ -278,10 +278,10 @@ func (h *Handler) UpdateAssetInventoryRecord(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	req.Creator = existing.Creator
-	if strings.TrimSpace(req.IPAddress) != "" {
-		valid, e := h.DB.IsPlatformConfiguredIP(req.SystemName, req.IPAddress)
+	if strings.TrimSpace(req.IPAddress) != "" && strings.TrimSpace(req.Environment) != "" {
+		valid, e := h.DB.IsPlatformConfiguration(req.SystemName, req.IPAddress, req.Environment)
 		if e != nil || !valid {
-			writeJSON(w, 400, map[string]string{"error": "IP 位址必須來自 04-078 系統平台申請的配置 IP"})
+			writeJSON(w, 400, map[string]string{"error": "系統、IP 與環境必須來自同一筆 04-078 系統平台申請"})
 			return
 		}
 	}

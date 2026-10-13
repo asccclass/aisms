@@ -38,6 +38,7 @@
       const platforms = await platformResponse.json();
       const system = document.getElementById('ai-system_name');
       const ip = document.getElementById('ai-ip_address');
+      const environment = document.getElementById('ai-environment');
       const ipMap = {};
       const environmentMap = {};
       platforms.forEach(item => {
@@ -50,11 +51,16 @@
       const systemNames = Object.keys(ipMap).sort();
       system.outerHTML = '<select id="ai-system_name" class="form-control"><option value="">請選擇系統名稱</option>' + systemNames.map(value => `<option value="${escAttr(value)}">${esc(value)}（${esc(environmentMap[value].join('、'))}）</option>`).join('') + '</select>';
       ip.outerHTML = '<select id="ai-ip_address" class="form-control"><option value="">請先選擇系統名稱</option></select>';
+      environment.outerHTML = '<select id="ai-environment" class="form-control"><option value="">請先選擇系統名稱</option></select>';
       const systemSelect = document.getElementById('ai-system_name');
       const ipSelect = document.getElementById('ai-ip_address');
-      const syncIPs = () => { ipSelect.innerHTML = '<option value="">請選擇配置 IP</option>' + (ipMap[systemSelect.value] || []).map(value => `<option value="${escAttr(value)}">${esc(value)}</option>`).join(''); };
-      systemSelect.addEventListener('change', syncIPs);
-      window.refreshAssetInventoryIPs = syncIPs;
+      const environmentSelect = document.getElementById('ai-environment');
+      const syncPlatformFields = () => {
+        ipSelect.innerHTML = '<option value="">請選擇配置 IP</option>' + (ipMap[systemSelect.value] || []).map(value => `<option value="${escAttr(value)}">${esc(value)}</option>`).join('');
+        environmentSelect.innerHTML = '<option value="">請選擇環境</option>' + (environmentMap[systemSelect.value] || []).map(value => `<option value="${escAttr(value)}">${esc(value)}</option>`).join('');
+      };
+      systemSelect.addEventListener('change', syncPlatformFields);
+      window.refreshAssetInventoryIPs = syncPlatformFields;
     }
     return true;
   }
@@ -152,6 +158,8 @@
     window.refreshAssetInventoryIPs?.();
     const ip = document.getElementById('ai-ip_address');
     if (ip) ip.value = item.ip_address || '';
+    const environment = document.getElementById('ai-environment');
+    if (environment) environment.value = item.environment || '';
     if (ip && item.ip_address && ![...ip.options].some(option => option.value === item.ip_address)) {
       ip.add(new Option(item.ip_address, item.ip_address));
     }
