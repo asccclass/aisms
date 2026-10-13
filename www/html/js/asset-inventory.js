@@ -43,10 +43,14 @@
         const values = String(item.assigned_ip || '').split(/[,\s]+/).filter(Boolean);
         if (item.system_name) ipMap[item.system_name] = [...new Set([...(ipMap[item.system_name] || []), ...values])];
       });
+      const systemNames = Object.keys(ipMap).sort();
+      system.outerHTML = '<select id="ai-system_name" class="form-control"><option value="">請選擇系統名稱</option>' + systemNames.map(value => `<option value="${escAttr(value)}">${esc(value)}</option>`).join('') + '</select>';
       ip.outerHTML = '<select id="ai-ip_address" class="form-control"><option value="">請先選擇系統名稱</option></select>';
+      const systemSelect = document.getElementById('ai-system_name');
       const ipSelect = document.getElementById('ai-ip_address');
-      const syncIPs = () => { ipSelect.innerHTML = '<option value="">請選擇配置 IP</option>' + (ipMap[system.value] || []).map(value => `<option value="${escAttr(value)}">${esc(value)}</option>`).join(''); };
-      system.addEventListener('change', syncIPs);
+      const syncIPs = () => { ipSelect.innerHTML = '<option value="">請選擇配置 IP</option>' + (ipMap[systemSelect.value] || []).map(value => `<option value="${escAttr(value)}">${esc(value)}</option>`).join(''); };
+      systemSelect.addEventListener('change', syncIPs);
+      window.refreshAssetInventoryIPs = syncIPs;
     }
     return true;
   }
@@ -141,6 +145,9 @@
       const el = document.getElementById('ai-' + field);
       if (el) el.value = item[field] || '';
     });
+    window.refreshAssetInventoryIPs?.();
+    const ip = document.getElementById('ai-ip_address');
+    if (ip) ip.value = item.ip_address || '';
     const ip = document.getElementById('ai-ip_address');
     if (ip && item.ip_address && ![...ip.options].some(option => option.value === item.ip_address)) {
       ip.add(new Option(item.ip_address, item.ip_address));
