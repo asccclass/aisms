@@ -241,6 +241,13 @@ func (h *Handler) CreateAssetInventoryRecord(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	req.Creator = GetUserEmail(r)
+	if strings.TrimSpace(req.IPAddress) != "" {
+		valid, e := h.DB.IsPlatformConfiguredIP(req.SystemName, req.IPAddress)
+		if e != nil || !valid {
+			writeJSON(w, 400, map[string]string{"error": "IP 位址必須來自 04-078 系統平台申請的配置 IP"})
+			return
+		}
+	}
 	if strings.TrimSpace(req.Status) == "" {
 		req.Status = "active"
 	}
@@ -271,6 +278,13 @@ func (h *Handler) UpdateAssetInventoryRecord(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	req.Creator = existing.Creator
+	if strings.TrimSpace(req.IPAddress) != "" {
+		valid, e := h.DB.IsPlatformConfiguredIP(req.SystemName, req.IPAddress)
+		if e != nil || !valid {
+			writeJSON(w, 400, map[string]string{"error": "IP 位址必須來自 04-078 系統平台申請的配置 IP"})
+			return
+		}
+	}
 	if err := h.DB.UpdateAssetInventoryRecord(&req); err != nil {
 		writeJSON(w, 500, map[string]string{"error": err.Error()})
 		return

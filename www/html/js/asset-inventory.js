@@ -33,6 +33,21 @@
       return false;
     }
     root.innerHTML = await response.text();
+    const platformResponse = await fetch('/api/platform-requests');
+    if (platformResponse.ok) {
+      const platforms = await platformResponse.json();
+      const system = document.getElementById('ai-system_name');
+      const ip = document.getElementById('ai-ip_address');
+      const ipMap = {};
+      platforms.forEach(item => {
+        const values = String(item.assigned_ip || '').split(/[,\s]+/).filter(Boolean);
+        if (item.system_name) ipMap[item.system_name] = [...new Set([...(ipMap[item.system_name] || []), ...values])];
+      });
+      ip.outerHTML = '<select id="ai-ip_address" class="form-control"><option value="">請先選擇系統名稱</option></select>';
+      const ipSelect = document.getElementById('ai-ip_address');
+      const syncIPs = () => { ipSelect.innerHTML = '<option value="">請選擇配置 IP</option>' + (ipMap[system.value] || []).map(value => `<option value="${escAttr(value)}">${esc(value)}</option>`).join(''); };
+      system.addEventListener('change', syncIPs);
+    }
     return true;
   }
 
@@ -126,6 +141,10 @@
       const el = document.getElementById('ai-' + field);
       if (el) el.value = item[field] || '';
     });
+    const ip = document.getElementById('ai-ip_address');
+    if (ip && item.ip_address && ![...ip.options].some(option => option.value === item.ip_address)) {
+      ip.add(new Option(item.ip_address, item.ip_address));
+    }
   };
 
   window.saveAssetInventory = async function saveAssetInventory() {
