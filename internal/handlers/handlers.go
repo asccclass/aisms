@@ -36,6 +36,7 @@ var dashboardProviders = []models.DashboardFormProvider{
 	{Key: "protection_baselines", Label: "資通系統防護基準執行說明表", Description: "使用 protection_baseline_records 與 protection_baseline_controls 作為首頁表單資料來源"},
 	{Key: "system_platform_requests", Label: "系統平台申請資料", Description: "使用 system_platform_requests 資料表作為首頁表單資料來源"},
 	{Key: "application_change_requests", Label: "應用系統功能需求更新建議單", Description: "使用 application_change_requests 資料表作為首頁表單資料來源"},
+	{Key: "vulnerability_remediation", Label: "ISMS-04-033 資訊設備重大弱點補強紀錄表", Description: "使用 vulnerability_remediation_records 與 vulnerability_remediation_items 資料表作為首頁表單資料來源"},
 	{Key: "placeholder", Label: "示範骨架 / 尚未接資料", Description: "保留表單卡片與說明，首頁顯示空狀態"},
 	{Key: "custom_table_template", Label: "自訂資料表範本", Description: "作為未來接新資料表的 provider 樣板，預設先回傳空資料"},
 }
@@ -1351,6 +1352,8 @@ func (h *Handler) loadDashboardRecords(form models.DashboardForm, creator string
 		return h.loadSystemPlatformRequestDashboardRecords(creator)
 	case "application_change_requests":
 		return h.loadApplicationChangeRequestDashboardRecords(creator)
+	case "vulnerability_remediation":
+		return h.loadVulnerabilityRemediationDashboardRecords(creator)
 	case "placeholder":
 		return h.loadPlaceholderDashboardRecords()
 	case "custom_table_template":
@@ -1360,6 +1363,18 @@ func (h *Handler) loadDashboardRecords(form models.DashboardForm, creator string
 	default:
 		return []models.DashboardRecord{}, nil
 	}
+}
+
+func (h *Handler) loadVulnerabilityRemediationDashboardRecords(creator string) ([]models.DashboardRecord, error) {
+	rows, err := h.DB.ListVulnerabilityRemediationRecordsByCreator(creator)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]models.DashboardRecord, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, models.DashboardRecord{ID: row.ID, PrimaryName: row.SystemName, SecondaryName: row.ScanIP, Status: row.Status, InventoryDate: row.ScanDate, UpdatedAt: row.UpdatedAt})
+	}
+	return out, nil
 }
 
 func (h *Handler) loadAssetInventoryDashboardRecords(creator string) ([]models.DashboardRecord, error) {
@@ -1690,6 +1705,28 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 			h.ListApplicationChangeRequests(w, r)
 		case http.MethodPost:
 			h.CreateApplicationChangeRequest(w, r)
+		default:
+			http.Error(w, "method not allowed", 405)
+		}
+	}))
+	mux.HandleFunc("/api/vulnerability-remediation-records", auditAuth(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			h.ListVulnerabilityRemediationRecords(w, r)
+		case http.MethodPost:
+			h.CreateVulnerabilityRemediationRecord(w, r)
+		default:
+			http.Error(w, "method not allowed", 405)
+		}
+	}))
+	mux.HandleFunc("/api/vulnerability-remediation-records/", auditAuth(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			h.GetVulnerabilityRemediationRecord(w, r)
+		case http.MethodPut:
+			h.UpdateVulnerabilityRemediationRecord(w, r)
+		case http.MethodDelete:
+			h.DeleteVulnerabilityRemediationRecord(w, r)
 		default:
 			http.Error(w, "method not allowed", 405)
 		}

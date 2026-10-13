@@ -301,6 +301,9 @@ func (d *DB) migrate() error {
 	_, _ = d.conn.Exec(`ALTER TABLE application_change_requests ADD COLUMN scan_file_url TEXT NOT NULL DEFAULT ''`)
 	_, _ = d.conn.Exec(`ALTER TABLE system_platform_requests ADD COLUMN assigned_ip TEXT NOT NULL DEFAULT ''`)
 	if err == nil {
+		if _, e := d.conn.Exec(`CREATE TABLE IF NOT EXISTS vulnerability_remediation_records (id INTEGER PRIMARY KEY AUTOINCREMENT, system_name TEXT NOT NULL DEFAULT '', form_date TEXT NOT NULL DEFAULT '', scan_ip TEXT NOT NULL DEFAULT '', scan_date TEXT NOT NULL DEFAULT '', report_date TEXT NOT NULL DEFAULT '', weakness_total INTEGER NOT NULL DEFAULT 0, fixed_total INTEGER NOT NULL DEFAULT 0, unfixed_total INTEGER NOT NULL DEFAULT 0, handler_signature TEXT NOT NULL DEFAULT '', supervisor_signature TEXT NOT NULL DEFAULT '', service_result TEXT NOT NULL DEFAULT '', service_reason TEXT NOT NULL DEFAULT '', service_staff TEXT NOT NULL DEFAULT '', service_team_lead TEXT NOT NULL DEFAULT '', security_chief TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'active', creator TEXT NOT NULL DEFAULT '', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP); CREATE TABLE IF NOT EXISTS vulnerability_remediation_items (id INTEGER PRIMARY KEY AUTOINCREMENT, record_id INTEGER NOT NULL REFERENCES vulnerability_remediation_records(id) ON DELETE CASCADE, sequence INTEGER NOT NULL, weakness_name TEXT NOT NULL DEFAULT '', risk_level TEXT NOT NULL DEFAULT '', remediation TEXT NOT NULL DEFAULT '', remediated_date TEXT NOT NULL DEFAULT '', unfixable_reason TEXT NOT NULL DEFAULT '', handler_signature TEXT NOT NULL DEFAULT '')`); e != nil {
+			return e
+		}
 		_ = d.seedDashboardForms()
 		_ = d.seedCustomTableTemplateRecords()
 		_ = d.seedFirewallRequests()
