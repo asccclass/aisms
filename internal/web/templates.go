@@ -40,10 +40,10 @@ func BuildNav(activeHref string) []NavItem {
 	items := []NavItem{
 		{Label: "儀表板", Icon: "📊", Href: "/"},
 		{Label: "04-008資訊資產清冊", Icon: "📦", Href: "/asset-inventory"},
+		{Label: "ISMS-04-033弱點補強", Icon: "🛠️", Href: "/vulnerability-remediation.html"},
 		{Label: "04-042防火牆申請", Icon: "🔥", Href: "/firewall-requests"},
 		{Label: "防火牆3D關聯圖", Icon: "🕸️", Href: "/firewall-graph"},
 		{Label: "04-052功能需求更新", Icon: "📝", Href: "/application-change-requests"},
-		{Label: "ISMS-04-033弱點補強", Icon: "🛠️", Href: "/vulnerability-remediation.html"},
 		{Label: "04-062特殊權限帳號管理", Icon: "👤", Href: "/accounts"},
 		{Label: "04-069防護基準執行說明", Icon: "🛡️", Href: "/protection-baselines"},
 		{Label: "04-078系統平台申請", Icon: "🖥️", Href: "/platform-requests"},
