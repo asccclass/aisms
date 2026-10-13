@@ -1,13 +1,12 @@
-FROM golang:1.21-alpine AS builder
-RUN apk add --no-cache gcc musl-dev sqlite-dev
+FROM golang:1.26-alpine AS builder
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=1 GOOS=linux go build -a -ldflags="-s -w" -o isms-server cmd/main.go
+RUN go build -a -ldflags="-s -w" -o isms-server cmd/main.go
 
 FROM alpine:3.19
-RUN apk add --no-cache ca-certificates sqlite-libs tzdata libreoffice
+RUN apk add --no-cache ca-certificates tzdata libreoffice
 RUN cp /usr/share/zoneinfo/Asia/Taipei /etc/localtime && echo "Asia/Taipei" > /etc/timezone
 WORKDIR /app
 COPY --from=builder /src/isms-server /app/isms-server

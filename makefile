@@ -1,15 +1,14 @@
 GOOS := $(shell go env GOOS)
 EXE_EXT := $(if $(filter windows,$(GOOS)),.exe,)
 SERVER_BIN := isms-server$(EXE_EXT)
-CGO_GO := $(if $(filter windows,$(GOOS)),set CGO_ENABLED=1&&,CGO_ENABLED=1)
 
 .PHONY: run build tidy clean
 
 run:
-	$(CGO_GO) go run cmd/main.go
+	go run cmd/main.go
 
 build:
-	$(CGO_GO) go build -o $(SERVER_BIN) cmd/main.go
+	go build -o $(SERVER_BIN) cmd/main.go
 
 tidy:
 	go mod tidy

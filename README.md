@@ -293,8 +293,7 @@ GET /api/accounts/export-docx?status=active&inventory_by=王小明&group_leader=
 
 ### 1. 環境需求
 
-- Go 1.21+（需含 CGO 支援 sqlite3）
-- GCC / musl（Alpine 環境：`apk add gcc musl-dev sqlite-dev`）
+- Go 1.21+
 - 若需使用 `GET /api/platform-requests/{id}/export-pdf`：
 - Windows 建議安裝 Microsoft Word，供 Word COM 轉 PDF
 - Linux / 容器環境建議安裝 LibreOffice，並確保 `soffice` 可由系統 `PATH` 呼叫
